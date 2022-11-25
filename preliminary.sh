@@ -35,25 +35,25 @@
 #    --PrintHelp:                 Print this help message.
 
 
-SCRIPT="scratch/tcp-variants-comparison"
+#SCRIPT="scratch/tcp-variants-comparison"
+SCRIPT="scratch/quic-variants-comparison-bulksend"
 ARG=""
 
-ARG="$ARG --duration=10"
-ARG="$ARG --tracing=true"
-ARG="$ARG --mtu=1200"
+#ARG="$ARG --duration=10"
+#ARG="$ARG --tracing=true"
+#ARG="$ARG --mtu=1200"
+ARG="$ARG --num_flows=2"
 
 
 echo "Preliminary simulations with TCP CCs"
 NS3="/home/raffaello/workspace/ns-allinone-3.37/ns-3.37/ns3"
 OUT=$(pwd)/traces
 
-for TP in TcpNewReno TcpLinuxReno TcpHighSpeed \
-          TcpVegas TcpScalable \
-          TcpDctcp TcpCubic TcpBbr;
+for TP in TcpNewReno TcpCubic;
 do
 	echo $TP
 
-	$NS3 run "$SCRIPT $ARG --prefix_name=$TP" --cwd $OUT
+	$NS3 run "$SCRIPT $ARG --transport_prot=$TP --prefix_name=$TP" --cwd $OUT
 done
 
 
