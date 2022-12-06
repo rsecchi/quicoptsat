@@ -140,11 +140,13 @@ int main (int argc, char *argv[])
   double data_mbytes = 0;
   uint32_t mtu_bytes = 1400;
   uint16_t num_flows = 1;
-  float duration = 100;
+  float duration = 200;
   uint32_t run = 0;
   bool flow_monitor = false;
   bool pcap = false;
   std::string queue_disc_type = "ns3::PfifoFastQueueDisc";
+
+
 
   // LogComponentEnable ("Config", LOG_LEVEL_ALL);
   CommandLine cmd;
@@ -331,24 +333,30 @@ int main (int argc, char *argv[])
       QuicClientHelper dlClient (sink_interfaces.GetAddress (i, 0), port);
       dlClient.SetAttribute ("Interval", TimeValue (MicroSeconds(interPacketInterval)));
       dlClient.SetAttribute ("PacketSize", UintegerValue(1400));
-      dlClient.SetAttribute ("MaxPackets", UintegerValue(10000000));
-      clientApps.Add (dlClient.Install (sources.Get (i)));
+      dlClient.SetAttribute ("MaxPackets", UintegerValue(20000000));
+      ApplicationContainer quic = dlClient.Install (sources.Get (i));
+      Time t = Seconds(2+i*2);
+      Time t1 = Seconds(2+i*2+0.001);
+      quic.Start(t);
+      quic.Stop(Seconds(200));
+      Simulator::Schedule (t1, &Traces, sources.Get (i)->GetId(),  "./client", ".txt");
+      // clientApps.Add (quic );
     }
 
   serverApps.Start (Seconds (0.99));
-  clientApps.Stop (Seconds (20.0));
-  clientApps.Start (Seconds (2.0));
-  
-  for (uint16_t i = 0; i < num_flows; i++)
-    {
-      auto n2 = sinks.Get (i);
-      auto n1 = sources.Get (i);
-      Time t = Seconds(2.100001);
-      Simulator::Schedule (t, &Traces, n2->GetId(), 
-            "./server", ".txt");
-      Simulator::Schedule (t, &Traces, n1->GetId(), 
-            "./client", ".txt");
-    }
+  //clientApps.Stop (Seconds (20.0));
+  //clientApps.Start (Seconds (2.0));
+
+  //for (uint16_t i = 0; i < num_flows; i++)
+  //  {
+  //    auto n2 = sinks.Get (i);
+  //    auto n1 = sources.Get (i);
+  //    Time t = Seconds(2.100001);
+  //    //Simulator::Schedule (t, &Traces, n2->GetId(), 
+  //    //      "./server", ".txt");
+  //    //Simulator::Schedule (t, &Traces, n1->GetId(), 
+  //    //      "./client", ".txt");
+  //  }
 
   if (pcap)
     {
