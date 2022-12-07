@@ -441,7 +441,7 @@ main(int argc, char* argv[])
 
     // Create gateways, sources, and sinks
     NodeContainer gateways;
-    gateways.Create(1);
+    gateways.Create(2);
     NodeContainer sources;
     sources.Create(num_flows);
     NodeContainer sinks;
@@ -502,7 +502,7 @@ main(int argc, char* argv[])
         address.NewNetwork();
         Ipv4InterfaceContainer interfaces = address.Assign(devices);
 
-        devices = UnReLink.Install(gateways.Get(0), sinks.Get(i));
+        devices = LocalLink.Install(gateways.Get(1), sinks.Get(i));
         if (queue_disc_type == "ns3::PfifoFastQueueDisc")
         {
             tchPfifo.Install(devices);
@@ -520,6 +520,9 @@ main(int argc, char* argv[])
         interfaces = address.Assign(devices);
         sink_interfaces.Add(interfaces.Get(1));
     }
+
+    NetDeviceContainer devs;
+    devs = UnReLink.Install (gateways.Get(0), gateways.Get(1));
 
     NS_LOG_INFO("Initialize Global Routing.");
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
@@ -572,31 +575,31 @@ main(int argc, char* argv[])
             Simulator::Schedule(Seconds(start_time * index + 0.00001),
                                 &TraceCwnd,
                                 prefix_file_name + flowString + "-cwnd.data",
-                                index + 1);
+                                index + 2);
             Simulator::Schedule(Seconds(start_time * index + 0.00001),
                                 &TraceSsThresh,
                                 prefix_file_name + flowString + "-ssth.data",
-                                index + 1);
+                                index + 2);
             Simulator::Schedule(Seconds(start_time * index + 0.00001),
                                 &TraceRtt,
                                 prefix_file_name + flowString + "-rtt.data",
-                                index + 1);
+                                index + 2);
             Simulator::Schedule(Seconds(start_time * index + 0.00001),
                                 &TraceRto,
                                 prefix_file_name + flowString + "-rto.data",
-                                index + 1);
+                                index + 2);
             Simulator::Schedule(Seconds(start_time * index + 0.00001),
                                 &TraceNextTx,
                                 prefix_file_name + flowString + "-next-tx.data",
-                                index + 1);
+                                index + 2);
             Simulator::Schedule(Seconds(start_time * index + 0.00001),
                                 &TraceInFlight,
                                 prefix_file_name + flowString + "-inflight.data",
-                                index + 1);
-            Simulator::Schedule(Seconds(start_time * index + 0.1),
-                                &TraceNextRx,
-                                prefix_file_name + flowString + "-next-rx.data",
-                                num_flows + index + 1);
+                                index + 2);
+            //Simulator::Schedule(Seconds(start_time * index + 0.1),
+             //                   &TraceNextRx,
+               //                 prefix_file_name + flowString + "-next-rx.data",
+                 //               num_flows + index + 2);
         }
     }
 
