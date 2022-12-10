@@ -5,36 +5,71 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/traffic-control-helper.h"
 #include "ns3/flow-monitor-helper.h"
+#include "ns3/bulk-send-application.h"
+#include "ns3/config-store.h"
+#include "ns3/tcp-socket-base.h"
+
 #include <fstream>
 #include <string>
 
 
 using namespace ns3;
 
+
+void list_aggreagates(Ptr<Object> p) {
+	Object::AggregateIterator it = p->GetAggregateIterator();
+	while(it.HasNext())
+		std::cout << it.Next()->GetInstanceTypeId().GetName() << std::endl;
+}
+
+
 uint32_t num_flows = 1;
 std::ofstream cwnd[10];
 
+
+/* function callback to printe the congestion window */
 static void CwndTracer(std::string context, uint32_t oldval, uint32_t newval)
 {
 
 	uint32_t socket = int(context[43] - 48);
+	cwnd[socket] << Simulator::Now().GetSeconds() << " " << oldval << std::endl;
 	cwnd[socket] << Simulator::Now().GetSeconds() << " " << newval << std::endl;
 
 }
 
-void ConnectSocketTraces(uint32_t i) {
+/* function callback when a transfer is completed*/
+void Completed(Ptr<Socket> sock)
+{
+	Ptr<TcpSocketBase> tcp = sock->GetObject<TcpSocketBase>();
+	Address address;
+	tcp->GetPeerName(address);
+	InetSocketAddress transport = InetSocketAddress::ConvertFrom(address);	
+
+	std::cout << transport.GetPort()-9 << " ";
+	std::cout << Simulator::Now().GetSeconds() << std::endl;
+
+}
+
+
+void SocketTraces(uint32_t i, Ptr<BulkSendApplication> bulk) {
 
 	std::string name = 
-		"/NodeList/0/$ns3::TcpL4Protocol/SocketList/" +	std::to_string(i)
-		+ "/CongestionWindow";
-		std::cout << name << std::endl;
+		"/NodeList/0/$ns3::TcpL4Protocol/SocketList/" +	std::to_string(i);
 
-		Config::Connect(name, MakeCallback(&CwndTracer));	
+	Config::Connect(name + "/CongestionWindow", MakeCallback(&CwndTracer));
+
+	/* access to the socket */
+	Ptr<Socket> socket = bulk->GetSocket();
+	
+	socket->SetCloseCallbacks(MakeCallback(&Completed), 
+				MakeNullCallback<void, Ptr<Socket>>());
 }
+
 
 int main(int argc, char* argv[])
 {
 
+	uint32_t seed = 1;
 	uint32_t run = 0;
 	double error_p = 0.0;
 	double duration = 100.0;
@@ -56,6 +91,7 @@ int main(int argc, char* argv[])
 	cmd.AddValue("error_p", "Packet error rate", error_p);
 	cmd.AddValue("duration", "duration", duration);
 	cmd.AddValue("data", "Number of MBs to send", data_mbytes);
+	cmd.AddValue("seed", "Random numbers seed", seed);
 	cmd.AddValue("offset", "Spacing between connections", offset);
 	cmd.Parse(argc, argv);
 
@@ -66,7 +102,8 @@ int main(int argc, char* argv[])
 		TypeIdValue(TypeId::LookupByName(transport_prot)));
 	Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(std::stoi(mtu)));
 
-	SeedManager::SetSeed(1);
+
+	SeedManager::SetSeed(seed);
 	SeedManager::SetRun(run);
 
 	/* create nodes */
@@ -89,7 +126,6 @@ int main(int argc, char* argv[])
 	pp.SetDeviceAttribute("ReceiveErrorModel", PointerValue(&error_model));
 	NetDeviceContainer devs = pp.Install(nodes);
 
-	
 	/* assign addresses */
 	InternetStackHelper stack;
 	stack.Install(nodes);
@@ -106,9 +142,12 @@ int main(int argc, char* argv[])
 		src.SetAttribute("MaxBytes", UintegerValue(data_mbytes*1000000));
 		apps = src.Install(nodes.Get(0));
 		apps.Start(Seconds(i*offset));
-		apps.Stop(Seconds(duration));
 		cwnd[i].open("cwnd" + std::to_string(i) + ".tr", std::ios::out);
-		Simulator::Schedule(Seconds(i*offset+0.001), &ConnectSocketTraces, i);
+	
+		/* get reference to bulk application */
+		Ptr<BulkSendApplication> bulk;
+		bulk = apps.Get(0)->GetObject<BulkSendApplication>();
+		Simulator::Schedule(Seconds(i*offset+0.001), &SocketTraces, i, bulk);
 	}
 
 	/* create sinks */
@@ -118,9 +157,7 @@ int main(int argc, char* argv[])
 		PacketSinkHelper sink("ns3::TcpSocketFactory", saddr);
 		sinks = sink.Install(nodes.Get(1));
 		sinks.Start(Seconds(0));
-		sinks.Stop(Seconds(duration));
 	}
-
 
 	/* start simulation */
 	FlowMonitorHelper fmon;
