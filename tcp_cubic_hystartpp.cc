@@ -55,6 +55,21 @@ TcpCubic::GetTypeId()
                           BooleanValue(true),
                           MakeBooleanAccessor(&TcpCubic::m_hystart),
                           MakeBooleanChecker())
+            .AddAttribute("HyStartpp",
+                          "Enable (true) or disable (false) CSS in Hystart",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpCubic::m_hystartpp),
+                          MakeBooleanChecker())
+            .AddAttribute("css_growth_divisor",
+                          "Exponential growth factor CSS in Hystart",
+                          UintegerValue(8),
+                          MakeUintegerAccessor(&TcpCubic::m_css_growth_divisor),
+                          MakeUintegerChecker<uint8_t>())
+            .AddAttribute("css_max_rounds",
+                          "Maximum number of probing rounds in CSS",
+                          UintegerValue(5),
+                          MakeUintegerAccessor(&TcpCubic::m_css_max_rounds),
+                          MakeUintegerChecker<uint8_t>())
             .AddAttribute("HyStartLowWindow",
                           "Lower bound cWnd for hybrid slow start (segments)",
                           UintegerValue(16),
@@ -115,13 +130,16 @@ TcpCubic::TcpCubic()
       m_bicK(0.0),
       m_delayMin(Time::Min()),
       m_epochStart(Time::Min()),
-      m_found(false),
+      m_found(0),
       m_roundStart(Time::Min()),
       m_endSeq(0),
       m_lastAck(Time::Min()),
       m_cubicDelta(Time::Min()),
       m_currRtt(Time::Min()),
-      m_sampleCnt(0)
+      m_sampleCnt(0),
+      m_hystartRounds(0),
+      m_divisor(1),
+      m_baselineRtt(Time::Min())
 {
     NS_LOG_FUNCTION(this);
 }
@@ -152,7 +170,10 @@ TcpCubic::TcpCubic(const TcpCubic& sock)
       m_lastAck(sock.m_lastAck),
       m_cubicDelta(sock.m_cubicDelta),
       m_currRtt(sock.m_currRtt),
-      m_sampleCnt(sock.m_sampleCnt)
+      m_sampleCnt(sock.m_sampleCnt),
+      m_hystartRounds(sock.m_hystartRounds),
+      m_divisor(sock.m_divisor),
+      m_baselineRtt(sock.m_baselineRtt)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -184,6 +205,7 @@ TcpCubic::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         if (m_hystart && tcb->m_lastAckedSeq > m_endSeq)
         {
             HystartReset(tcb);
+            m_hystartRounds++;
         }
 
         // In Linux, the QUICKACK socket option enables the receiver to send
@@ -194,7 +216,7 @@ TcpCubic::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         // not reach as large of an initial window as in Linux.  Therefore,
         // we can approximate the effect of QUICKACK by making this slow
         // start phase perform Appropriate Byte Counting (RFC 3465)
-        tcb->m_cWnd += segmentsAcked * tcb->m_segmentSize;
+        tcb->m_cWnd += segmentsAcked * tcb->m_segmentSize / m_divisor;
         segmentsAcked = 0;
 
         NS_LOG_INFO("In SlowStart, updated to cwnd " << tcb->m_cWnd << " ssthresh "
@@ -373,16 +395,48 @@ TcpCubic::HystartUpdate(Ptr<TcpSocketState> tcb, const Time& delay)
                 m_found |= DELAY;
             }
         }
+
         /*
          * Either one of two conditions are met,
          * we exit from slow start immediately.
          */
-        if (m_found & m_hystartDetect)
+        if ((m_found & m_hystartDetect) && !m_hystartpp)
         {
             NS_LOG_DEBUG("Exit from SS, immediately :-)");
             tcb->m_ssThresh = tcb->m_cWnd;
         }
+
+        /* if CSS is enabled, record baseline RTT and
+         * entry round, and change SS growth rate (probing)
+         */
+        if ((m_found & m_hystartDetect) && m_hystartpp)
+        {
+            m_baselineRtt = m_delayMin;
+            m_divisor = m_css_growth_divisor;
+            m_css_first_round = m_hystartRounds;
+        }
     }
+
+    /* Conservative Slow Start (CSS) */
+    if ((m_found & m_hystartDetect) && m_hystartpp)
+    {
+        /* Enter CA after max rounds in CSS */
+        if (m_hystartRounds - m_css_first_round > m_css_max_rounds)
+        {
+            tcb->m_ssThresh = tcb->m_cWnd;
+            m_currRtt = Time::Min();
+            m_divisor = 1;
+        }
+        else
+        {
+            /*  Back to SS in delay drops below baseline */
+            if (m_delayMin < m_baselineRtt) {
+                m_divisor = 1;
+                m_found = 0;
+            }
+        }
+    }
+
 }
 
 Time
@@ -390,7 +444,7 @@ TcpCubic::HystartDelayThresh(const Time& t) const
 {
     NS_LOG_FUNCTION(this << t);
 
-    Time ret = t;
+    Time ret = t/8;
     if (t > m_hystartDelayMax)
     {
         ret = m_hystartDelayMax;

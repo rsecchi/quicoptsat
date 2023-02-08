@@ -113,6 +113,8 @@ int main(int argc, char* argv[])
 	std::string mtu = "1500";
 	std::string pacing = "0";
 	std::string pacing_iw = "0";
+	std::string hs = "0";
+	std::string hspp = "0";
 	std::string ss_pacing_ratio = "200";
 
 	CommandLine cmd(__FILE__);
@@ -131,6 +133,8 @@ int main(int argc, char* argv[])
 	cmd.AddValue("pacing", "Enable Pacing (0/1)", pacing);
 	cmd.AddValue("pacing_iw", "Enable Pacing for IW (0/1)", pacing_iw);
 	cmd.AddValue("ss_pacing_ratio", "pacing perc. increase in SS", ss_pacing_ratio);
+	cmd.AddValue("hystartpp", "Enable Hystart++", hspp);
+	cmd.AddValue("hystart", "Enable Hystart++", hs);
 	cmd.Parse(argc, argv);
 
 	if (pacing == "1")
@@ -138,6 +142,15 @@ int main(int argc, char* argv[])
 
 	if (pacing_iw == "1")
 		boolp_iw = true;
+
+	if (hspp == "1")
+	{
+		Config::SetDefault("ns3::TcpCubic::HyStartpp", BooleanValue(true));
+		Config::SetDefault("ns3::TcpCubic::HyStartDetect", IntegerValue(2));	
+	}
+
+	if (hs == "0")
+		Config::SetDefault("ns3::TcpCubic::HyStart", BooleanValue(false));
 
 	/* config */
 	/* pacing */

@@ -106,6 +106,7 @@ class TcpCubic : public TcpCongestionOps
     double m_beta;          //!< Beta for cubic multiplicative increase
 
     bool m_hystart;              //!< Enable or disable HyStart algorithm
+    bool m_hystartpp;            //!< Enable or disable CSS in Hystart
     int m_hystartDetect;         //!< Detect way for HyStart algorithm \see HybridSSDetectionMode
     uint32_t m_hystartLowWindow; //!< Lower bound cWnd for hybrid slow start (segments)
     Time m_hystartAckDelta;      //!< Spacing between ack's indicating train
@@ -126,13 +127,22 @@ class TcpCubic : public TcpCongestionOps
                                //    of the current epoch (in s)
     Time m_delayMin;           //!<  Min delay
     Time m_epochStart;         //!<  Beginning of an epoch
-    bool m_found;              //!<  The exit point is found?
+    uint32_t m_found;              //!<  The exit point is found?
     Time m_roundStart;         //!<  Beginning of each round
     SequenceNumber32 m_endSeq; //!<  End sequence of the round
     Time m_lastAck;            //!<  Last time when the ACK spacing is close
     Time m_cubicDelta;         //!<  Time to wait after recovery before update
     Time m_currRtt;            //!<  Current Rtt
     uint32_t m_sampleCnt;      //!<  Count of samples for HyStart
+
+    // Hystart++ parameters
+    uint32_t m_hystartRounds;
+    uint32_t m_css_first_round;   //!< Marks first round of CSS
+    uint8_t m_css_growth_divisor; //!< Exponential growth factor in CSS
+    uint8_t m_divisor;            //!< Current exponential growth divisor
+    uint8_t m_css_max_rounds;     //!< Max number of rounds in CSS
+    Time m_baselineRtt;           //!< Baseline RTT at CSS entry
+
 
   private:
     /**
