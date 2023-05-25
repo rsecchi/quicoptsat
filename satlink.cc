@@ -19,6 +19,7 @@
 
 using namespace ns3;
 
+uint32_t iw = 10;
 
 void list_aggregates(Ptr<Object> p) {
 	Object::AggregateIterator it = p->GetAggregateIterator();
@@ -69,6 +70,9 @@ void Completed(Ptr<Socket> sock)
 
 }
 
+void ChangeIW() {
+	Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(iw));
+}
 
 void SocketTraces(uint32_t i, Ptr<BulkSendApplication> bulk) {
 
@@ -102,7 +106,6 @@ int main(int argc, char* argv[])
 	double duration = 100.0;
 	double offset = 0.001;
 	uint64_t data_kbytes = 1000;
-	uint32_t iw = 10;
 	bool boolp = false;
 	bool boolp_iw = false;
 
@@ -158,7 +161,7 @@ int main(int argc, char* argv[])
 	Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(boolp_iw));
 	Config::SetDefault("ns3::TcpSocketState::PacingSsRatio", UintegerValue(stoi(ss_pacing_ratio)));
 	
-	Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(iw));
+	// Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(iw));
 	Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(327680000));
 	Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(327688000));
 	Config::SetDefault("ns3::TcpSocketBase::MaxWindowSize", UintegerValue(65534));
@@ -227,8 +230,12 @@ int main(int argc, char* argv[])
 		/* get reference to bulk application */
 		Ptr<BulkSendApplication> bulk;
 		bulk = apps.Get(0)->GetObject<BulkSendApplication>();
+
 		Simulator::Schedule(Seconds(i*offset+0.001), &SocketTraces, i, bulk);
+
 	}
+
+	Simulator::Schedule(Seconds(offset-0.001), &ChangeIW);
 
 	/* create sinks */
 	ApplicationContainer sinks;

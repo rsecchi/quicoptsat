@@ -56,7 +56,8 @@ for i in $RANGE;
 do
 	CT=$($NS3 run "$SCRIPT $ARG --transport_prot=$TP --data=$i --seed=$i")
 	echo $i $CT
-done > static_$TP.tr
+done
+#done > static_$TP.tr
 cp $NS3_DIR/cwnd0.tr static_cwnd_$TP.tr
 cp $NS3_DIR/rtt0.tr static_rtt_$TP.tr
 
