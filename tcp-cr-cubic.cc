@@ -362,9 +362,6 @@ TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Tim
     if (m_crState == TcpCubicCr::CarefulResumeState::CR_RECON)
     {
         /* Actions to perform in Recoinassance phase */
-        std::cout << "CR_RECON " << rtt.GetSeconds() << std::endl;
-        std::cout << "LAST RTT: " << m_lastRtt.GetSeconds() << std::endl;
-
         if (rtt <= m_lastRtt/10 || rtt >= m_lastRtt*10)
         {
             /* Drop plans to jump because past RTT is too different */
@@ -374,16 +371,12 @@ TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Tim
         SequenceNumber32 limit = SequenceNumber32(limit_bytes);
 
         if (tcb->m_lastAckedSeq >= limit) {
-            std::cout << "Move to UNVAL" << std::endl;
             /* Switch to Unvalidated phase */
             m_crState = TcpCubicCr::CarefulResumeState::CR_UNVAL;
 
             /* Calculate new seqno boundaty for cwnd validation */
             limit_bytes += tcb->m_segmentSize * m_lastWindow;
             limit = SequenceNumber32(limit_bytes);
-
-            std::cout << "WINDOW: " << tcb->m_cWnd << std::endl;
-            std::cout << "NEW LIMIT: " << limit_bytes << std::endl;
 
             tcb->m_cWnd = limit_bytes;
         }
@@ -396,7 +389,6 @@ TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Tim
         if (tcb->m_lastAckedSeq >= limit) {
            /* Previous cwnd is now validated, resume normally */
             m_crState = TcpCubicCr::CarefulResumeState::CR_NORMAL;
-            std::cout << "Move to NORMAL\n";
         }
     }
 
