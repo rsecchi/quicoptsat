@@ -367,7 +367,7 @@ TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Tim
             /* Drop plans to jump because past RTT is too different */
             m_crState = TcpCubicCr::CarefulResumeState::CR_NORMAL;
         }
-        limit_bytes = tcb->m_segmentSize * tcb->m_initialCWnd;
+        limit_bytes = tcb->m_segmentSize * (tcb->m_initialCWnd-1);
         SequenceNumber32 limit = SequenceNumber32(limit_bytes);
 
         if (tcb->m_lastAckedSeq >= limit) {
