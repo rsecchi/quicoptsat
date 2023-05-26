@@ -142,9 +142,9 @@ TcpCubicCr::TcpCubicCr()
       m_delayMin(Time::Min()),
       m_epochStart(Time::Min()),
       m_found(0),
-      m_CRstate(TcpCubicCr::CarefulResumeState::RECON),
       m_lastWindow(10),
       m_lastRtt(Time::Min()),
+      m_crState(TcpCubicCr::CarefulResumeState::CR_RECON),
       m_roundStart(Time::Min()),
       m_endSeq(0),
       m_lastAck(Time::Min()),
@@ -181,7 +181,7 @@ TcpCubicCr::TcpCubicCr(const TcpCubicCr& sock)
       m_found(sock.m_found),
       m_lastWindow(sock.m_lastWindow),
       m_lastRtt(sock.m_lastRtt),
-      m_CRstate(sock.CRstate),
+      m_crState(sock.m_crState),
       m_roundStart(sock.m_roundStart),
       m_endSeq(sock.m_endSeq),
       m_lastAck(sock.m_lastAck),
@@ -353,7 +353,55 @@ TcpCubicCr::Update(Ptr<TcpSocketState> tcb)
 void
 TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt)
 {
+    uint32_t limit_bytes;
+    SequenceNumber32 limit;
+
     NS_LOG_FUNCTION(this << tcb << segmentsAcked << rtt);
+
+    /* Careful Resume */
+    if (m_crState == TcpCubicCr::CarefulResumeState::CR_RECON)
+    {
+        /* Actions to perform in Recoinassance phase */
+        std::cout << "CR_RECON " << rtt.GetSeconds() << std::endl;
+        std::cout << "LAST RTT: " << m_lastRtt.GetSeconds() << std::endl;
+
+        if (rtt <= m_lastRtt/10 || rtt >= m_lastRtt*10)
+        {
+            /* Drop plans to jump because past RTT is too different */
+            m_crState = TcpCubicCr::CarefulResumeState::CR_NORMAL;
+        }
+        limit_bytes = tcb->m_segmentSize * tcb->m_initialCWnd;
+        SequenceNumber32 limit = SequenceNumber32(limit_bytes);
+
+        if (tcb->m_lastAckedSeq >= limit) {
+            std::cout << "Move to UNVAL" << std::endl;
+            /* Switch to Unvalidated phase */
+            m_crState = TcpCubicCr::CarefulResumeState::CR_UNVAL;
+
+            /* Calculate new seqno boundaty for cwnd validation */
+            limit_bytes += tcb->m_segmentSize * m_lastWindow;
+            limit = SequenceNumber32(limit_bytes);
+
+            std::cout << "WINDOW: " << tcb->m_cWnd << std::endl;
+            std::cout << "NEW LIMIT: " << limit_bytes << std::endl;
+
+            tcb->m_cWnd = limit_bytes;
+        }
+        return;
+    }
+
+    if (m_crState == TcpCubicCr::CarefulResumeState::CR_UNVAL) 
+    {
+        /* Actions to perform in Unvalidated phase */
+        if (tcb->m_lastAckedSeq >= limit) {
+           /* Previous cwnd is now validated, resume normally */
+            m_crState = TcpCubicCr::CarefulResumeState::CR_NORMAL;
+            std::cout << "Move to NORMAL\n";
+        }
+    }
+
+    /* Careful Resume proceeds with normal congestion control */
+
 
     /* Discard delay samples right after fast recovery */
     if (m_epochStart != Time::Min() && (Simulator::Now() - m_epochStart) < m_cubicDelta)
@@ -507,6 +555,12 @@ void
 TcpCubicCr::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCongState_t newState)
 {
     NS_LOG_FUNCTION(this << tcb << newState);
+
+    if (newState == TcpSocketState::CA_RECOVERY || 
+        newState == TcpSocketState::CA_LOSS)
+    {
+        m_crState = TcpCubicCr::CarefulResumeState::CR_NORMAL;
+    }
 
     if (newState == TcpSocketState::CA_LOSS)
     {

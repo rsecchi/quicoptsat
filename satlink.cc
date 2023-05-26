@@ -112,6 +112,8 @@ int main(int argc, char* argv[])
 	std::string transport_prot = "TcpCubic";
 	std::string bandwidth = "5Mbps";
 	std::string delay = "45ms";
+	std::string last_rtt = "10ms";
+	std::string last_cwnd = "10";
 	std::string qlen = "100p";
 	std::string mtu = "1500";
 	std::string pacing = "0";
@@ -138,6 +140,8 @@ int main(int argc, char* argv[])
 	cmd.AddValue("ss_pacing_ratio", "pacing perc. increase in SS", ss_pacing_ratio);
 	cmd.AddValue("hystartpp", "Enable Hystart++", hspp);
 	cmd.AddValue("hystart", "Enable Hystart++", hs);
+	cmd.AddValue("last_rtt", "Careful Resume stored RTT", last_rtt);
+	cmd.AddValue("last_cwnd", "Careful Resume stored cwnd", last_cwnd);
 	cmd.Parse(argc, argv);
 
 	if (pacing == "1")
@@ -172,6 +176,9 @@ int main(int argc, char* argv[])
 	Config::SetDefault("ns3::TcpL4Protocol::SocketType",
 		TypeIdValue(TypeId::LookupByName(transport_prot)));
 	Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(std::stoi(mtu)));
+
+	Config::SetDefault("ns3::TcpCubicCr::LastRtt", StringValue(last_rtt));
+	Config::SetDefault("ns3::TcpCubicCr::LastWindow", UintegerValue(std::stoi(last_cwnd)));
 
 	SeedManager::SetSeed(seed);
 	SeedManager::SetRun(run);

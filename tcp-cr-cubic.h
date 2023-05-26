@@ -94,20 +94,17 @@ class TcpCubicCr : public TcpCongestionOps
 
   private:
 
-	/*
-	 * \brief CR states
-	*/
-	enum CarefulResumeState {
-		RECON,
-		UNVAL,
-		NORMAL,
-		OBSERV
-	};
 
-	// CR parameters
-	uint32_t m_lastWindow;     //!< window adjust at the start of Unv. Period
-	Time m_lastRtt;            //!< Careful Resume estimation of the path RTT
-	uint32_t m_CRstate;        //!< Careful Resume state
+    /**
+     * \brief Values to detect the Slow Start mode of HyStart
+     */
+    enum CarefulResumeState
+    {
+        CR_RECON,    //!< Reconaissance State
+        CR_UNVAL,    //!< Unvalidated Period after jump
+        CR_NORMAL    //!< Standard congestion control
+    };
+
 
     /**
      * \brief Values to detect the Slow Start mode of HyStart
@@ -145,6 +142,12 @@ class TcpCubicCr : public TcpCongestionOps
     Time m_delayMin;           //!<  Min delay
     Time m_epochStart;         //!<  Beginning of an epoch
     uint32_t m_found;              //!<  The exit point is found?
+
+	// CR parameters
+	uint32_t m_lastWindow;     //!< window adjust at the start of Unv. Period
+	Time m_lastRtt;            //!< Careful Resume estimation of the path RTT
+	uint32_t m_crState;        //!< Careful Resume state machine 
+
     Time m_roundStart;         //!<  Beginning of each round
     SequenceNumber32 m_endSeq; //!<  End sequence of the round
     Time m_lastAck;            //!<  Last time when the ACK spacing is close
