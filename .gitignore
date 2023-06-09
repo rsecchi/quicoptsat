@@ -1,0 +1,6 @@
+.vagrant
+emulation/logs
+
+*.py[cod]
+*.png
+*.o
