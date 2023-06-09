@@ -1,0 +1,42 @@
+$SETUP_SCRIPT = <<SCRIPT
+
+  apt-get install -y python2
+
+  sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 2
+  sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 1
+
+  # Get pip 2, so that mininet installation later is happy
+  curl https://bootstrap.pypa.io/pip/2.7/get-pip.py --output get-pip.py
+  sudo python2 get-pip.py
+
+  apt-get install -y make
+  apt-get install -y gcc
+
+  git clone https://github.com/mininet/mininet
+  echo `pwd`
+  export LC_ALL=C
+  # Cannot use -a flag on install.sh as pox requires python-scapy package which is no longer supported in 20.04
+  sudo mininet/util/install.sh -fnv
+
+SCRIPT
+
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "generic/ubuntu2004"
+  
+  # enable X11 forwarding
+  config.ssh.forward_agent = true
+  config.ssh.forward_x11 = true
+
+
+  config.vm.provider :libvirt do |libvirt|
+    libvirt.memory=16384
+    libvirt.cpus=8
+  end
+
+  config.vm.provision "shell", privileged: true, inline: $SETUP_SCRIPT
+
+  config.vm.synced_folder ".", "/vagrant", type: "nfs", nfs_version: 4, nfs_udp: false
+  
+
+end
