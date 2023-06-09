@@ -1,5 +1,6 @@
 .vagrant
 emulation/logs
+emulation/scripts/scratch
 
 *.py[cod]
 *.png
