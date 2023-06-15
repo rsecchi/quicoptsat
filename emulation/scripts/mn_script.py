@@ -134,7 +134,7 @@ class DumbbellTopo( Topo ):
 def doSimulation(log_root=None, cong_alg=None,
                      network_model_file=None, mpd_location=None, dash_alg=None,
                       ignore_link_loss=None, clients=1, start_seeds_file='', rtts=None,
-                        background_traffic_path=None):
+                        background_traffic_path=None, transfer_size=None):
     "Create network and run simple performance test"
 
     # Create Topology
@@ -163,7 +163,9 @@ def doSimulation(log_root=None, cong_alg=None,
     # Do Simulation
 
     pcap_tmp_path = '/home/vagrant/tmp'
-    save_root = '/vagrant/logs/DSL/%s' % cong_alg
+    save_root = '/vagrant/logs/DSL/%s/%s' % (cong_alg, transfer_size)
+
+    os.makedirs(save_root)
 
     # Clear previous kernel logs
     server.cmd('echo "" > /var/log/kern.log')
@@ -175,7 +177,7 @@ def doSimulation(log_root=None, cong_alg=None,
     client_pcap = client.popen('tcpdump -s 200 -w %s -z gzip' % receiver_pcap_path)
 
     print('Running')
-    server.cmd('sudo python3 /vagrant/scripts/scratch/server.py %s&' % server.IP())
+    server.cmd('sudo python3 /vagrant/scripts/scratch/server.py %s %s&' % (server.IP(), transfer_size))
     server_pid = server.cmd("echo $!")
     client.cmd('sudo python3 /vagrant/scripts/scratch/client.py %s&' % server.IP())
 
