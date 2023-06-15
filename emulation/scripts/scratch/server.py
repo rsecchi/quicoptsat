@@ -10,12 +10,14 @@ server.listen()
 
 handle, _ = server.accept()
 
-handle.sendall(b'C'*1_800_000)
+transfer_size_kb = sys.argv[2]
 
-time.sleep(3)
+handle.sendall(b'C'*transfer_size_kb)
 
-handle.sendall(b'Z'*1_800_000)
+# time.sleep(3)
 
-time.sleep(3)
+# handle.sendall(b'Z'*1_800_000)
+
+# time.sleep(3)
 
 handle.close()
