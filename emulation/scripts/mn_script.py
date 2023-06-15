@@ -12,6 +12,7 @@ import math
 import json
 import time
 import datetime
+import argparse
 
 precise_time_str = "%y-%m-%d-%H:%M:%S:%f"
 
@@ -193,5 +194,12 @@ def doSimulation(log_root=None, cong_alg=None,
 
 
 if __name__ == '__main__':
-    doSimulation(cong_alg='cubic_cr')
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--cong_alg', help='Congestion control algorithm to use', required=True)
+    parser.add_argument('--transfer_size', help='Size in bytes for the server to send to the client', required=True)
+
+    args = parser.parse_args()
+
+    doSimulation(cong_alg=args.cong_alg, transfer_size=args.transfer_size)
 
