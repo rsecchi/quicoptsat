@@ -3,7 +3,9 @@ ROOT=/vagrant
 MODULE_DIR=/home/vagrant/cubic-modified
 
 clone_module_dir:
-	git clone https://github.com/janev94/careful-resume $(MODULE_DIR)
+	@if [ ! -d $(MODULE_DIR) ]; then \
+		git clone https://github.com/janev94/careful-resume $(MODULE_DIR); \
+	fi
 
 module: $(MODULE_DIR)/tcp_cubic_cr.c | clone_module_dir
 	cd $(MODULE_DIR) && make
