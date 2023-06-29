@@ -12,9 +12,10 @@ module: $(MODULE_DIR)/tcp_cubic_cr.c | clone_module_dir
 
 install_module: module
 ifneq ($(IW),)
-	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=$(IW)
+	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=$(IW) USE_JUMP=0 JUMP=60
 else
-	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=10
+	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=10 USE_JUMP=1 JUMP=60
+endif
 endif
 
 unload_module:
