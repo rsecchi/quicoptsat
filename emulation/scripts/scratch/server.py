@@ -10,7 +10,7 @@ server.listen()
 
 handle, _ = server.accept()
 
-transfer_size_kb = sys.argv[2]
+transfer_size_kb = int(sys.argv[2])
 
 handle.sendall(b'C'*transfer_size_kb)
 
