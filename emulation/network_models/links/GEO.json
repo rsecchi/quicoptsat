@@ -1,6 +1,6 @@
 {
     "changes": [
-        {"time": 0, "bw": 50, "rtt": 500, "loss": 0}
+        {"time": 0, "bw": 25, "rtt": 550, "loss": 0}
         ],
     "repeat": "False",
     "pause": 30,
