@@ -142,8 +142,13 @@ def doSimulation(log_root=None, cong_alg=None,
     net.start()
 
     s1, s2 = net.get('s1', 's2')
-    config_bw('/vagrant/network_models/links/DSL.json', s1, s2, [], None)
-
+    if network_model_file:
+        config_bw(network_model_file, s1, s2, [], None)
+    else:
+        #Default to DSL link
+        print("No Network Model provided, using default (network_models/links/DSL.json)")
+        config_bw('/vagrant/network_models/links/DSL.json', s1, s2, [], None)
+	
     server, client = net.get('h1', 'h2')
     net.pingAll()
 
@@ -160,9 +165,13 @@ def doSimulation(log_root=None, cong_alg=None,
     # Do Simulation
 
     pcap_tmp_path = '/home/vagrant/tmp'
-    save_root = '/vagrant/logs/DSL/%s/%s' % (cong_alg, transfer_size)
+    if log_root:
+        save_root = log_root
+    else:
+        save_root = '/vagrant/logs/DSL/%s/%s' % (cong_alg, transfer_size)
 
-    os.makedirs(save_root)
+    if not os.path.exists(save_root):
+        os.makedirs(save_root)
 
     # Clear previous kernel logs
     server.cmd('echo "" > /var/log/kern.log')
@@ -176,13 +185,13 @@ def doSimulation(log_root=None, cong_alg=None,
     print('Running')
     server.cmd('sudo python3 /vagrant/scripts/scratch/server.py %s %s&' % (server.IP(), transfer_size))
     server_pid = server.cmd("echo $!")
-    client.cmd('sudo python3 /vagrant/scripts/scratch/client.py %s&' % server.IP())
+    client.cmd('sudo python3 /vagrant/scripts/scratch/client.py %s %s' % (server.IP(), transfer_size))
 
-
-    server.cmd('wait %s' % server_pid)
     print('Done')
     # copy kernel logs
     os.system('sudo cp /var/log/kern.log %s/' % (save_root))
+
+    time.sleep(3)
 
     server_pcap.terminate()
     client_pcap.terminate()
@@ -197,8 +206,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--cong_alg', help='Congestion control algorithm to use', required=True)
     parser.add_argument('--transfer_size', help='Size in bytes for the server to send to the client', required=True)
+    parser.add_argument('--log_root', help='Directory where to store the results')
+    parser.add_argument('--network_model_file', help='File with link defining properties')
 
     args = parser.parse_args()
 
-    doSimulation(cong_alg=args.cong_alg, transfer_size=args.transfer_size)
+    doSimulation(cong_alg=args.cong_alg, transfer_size=args.transfer_size, log_root=args.log_root, network_model_file=args.network_model_file)
 
