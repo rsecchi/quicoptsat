@@ -16,6 +16,12 @@ ifneq ($(IW),)
 else
 	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=10 USE_JUMP=1 JUMP=60
 endif
+
+# LEO BDP = 417
+# 1/2 BDP = 208
+# 2/3 BDP = 278
+
+install_module_LEO_IW: module
 endif
 
 unload_module:
