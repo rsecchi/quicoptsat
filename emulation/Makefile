@@ -22,6 +22,24 @@ endif
 # 2/3 BDP = 278
 
 install_module_LEO_IW: module
+ifneq ($(IW),)
+	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=$(IW)
+else
+	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=10 USE_JUMP=0 JUMP=0
+endif
+
+install_module_LEO_12BDP: module
+ifneq ($(IW),)
+	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=$(IW)
+else
+	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=10 USE_JUMP=1 JUMP=208
+endif
+
+install_module_LEO_23BDP: module
+ifneq ($(IW),)
+	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=$(IW)
+else
+	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=10 USE_JUMP=1 JUMP=278
 endif
 
 unload_module:
