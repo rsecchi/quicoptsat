@@ -46,4 +46,7 @@ unload_module:
 	sudo rmmod tcp_cubic_cr
 
 run: ${ROOT}/scripts/mn_script.py install_module
-	sudo python ${ROOT}/scripts/mn_script.py
+	sudo python ${ROOT}/scripts/mn_script.py --cong_alg cubic_cr --transfer_size 50000 --log_root /vagrant/logs/test
+
+
+LOGS_TEST = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/DSL/cubic_cr/${size}/experiment.info )
