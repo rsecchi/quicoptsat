@@ -50,10 +50,19 @@ run: ${ROOT}/scripts/mn_script.py install_module
 
 
 LOGS_TEST = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/DSL/cubic_cr/${size}/experiment.info )
+CWND_FIGS = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/DSL/cubic_cr/${size}/cwnd.png )
+
 LOGS_IW = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/IW/${size}/experiment.info )
 LOGS_12BDP = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/12BDP/${size}/experiment.info )
 LOGS_23BDP = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/23BDP/${size}/experiment.info )
+
+LOGS_IW_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/IW/${size}/cwnd.png )
+LOGS_12BDP_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/12BDP/${size}/cwnd.png )
+LOGS_23BDP_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/23BDP/${size}/cwnd.png )
+
 LOGS_ALL = ${LOGS_IW} ${LOGS_12BDP} ${LOGS_23BDP} 
+
+PLOTS_CWND = ${LOGS_IW_CWND} ${LOGS_12BDP_CWND} ${LOGS_23BDP_CWND}
 
 %/experiment.info: ${ROOT}/scripts/mn_script.py
 	$(eval RES_DIR = $(@D))
@@ -81,6 +90,43 @@ LOGS_ALL = ${LOGS_IW} ${LOGS_12BDP} ${LOGS_23BDP}
 	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
 	sudo python ${ROOT}/scripts/mn_script.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
 
+##############
+# CWND Plots
+##############
+
+# LOGS_IW
+/vagrant/logs/LEO/cubic_cr/IW/%/cwnd.png: /vagrant/logs/LEO/cubic_cr/IW/%/kern.log /vagrant/scripts/analytics/plot_cwnd.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	python3 /vagrant/scripts/analytics/plot_cwnd.py --kern_log_path $< --save_path $(@D) --file_type png
+
+
+# LOGS_12BDP 
+/vagrant/logs/LEO/cubic_cr/12BDP/%/cwnd.png: /vagrant/logs/LEO/cubic_cr/12BDP/%/kern.log /vagrant/scripts/analytics/plot_cwnd.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	python3 /vagrant/scripts/analytics/plot_cwnd.py --kern_log_path $< --save_path $(@D) --file_type png
+
+
+# LOGS_23BDP
+/vagrant/logs/LEO/cubic_cr/23BDP/%/cwnd.png: /vagrant/logs/LEO/cubic_cr/23BDP/%/kern.log /vagrant/scripts/analytics/plot_cwnd.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	python3 /vagrant/scripts/analytics/plot_cwnd.py --kern_log_path $< --save_path $(@D) --file_type png
+
+
 experiments_all: ${LOGS_ALL}
 
+
 experiments_test: ${LOGS_TEST}
+
+
+experiments_plots: ${PLOTS_CWND}
+
+
+/vagrant/logs/DSL/cubic_cr/%/cwnd.png: /vagrant/logs/DSL/cubic_cr/%/kern.log /vagrant/scripts/analytics/plot_cwnd.py
+	python3 /vagrant/scripts/analytics/plot_cwnd.py --kern_log_path $< --save_path $@ --file_type png
+
+plot_cwnds: ${CWND_FIGS}
+
+	
