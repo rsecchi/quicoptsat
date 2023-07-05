@@ -71,11 +71,17 @@ LOGS_IW = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cu
 LOGS_12BDP = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/12BDP/${size}/experiment.info )
 LOGS_23BDP = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/23BDP/${size}/experiment.info )
 
+
+LOGS_IW_GEO = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/GEO/cubic_cr/IW/${size}/experiment.info )
+LOGS_12BDP_GEO = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/GEO/cubic_cr/12BDP/${size}/experiment.info )
+LOGS_23BDP_GEO = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/GEO/cubic_cr/23BDP/${size}/experiment.info )
+
+
 LOGS_IW_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/IW/${size}/cwnd.png )
 LOGS_12BDP_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/12BDP/${size}/cwnd.png )
 LOGS_23BDP_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/23BDP/${size}/cwnd.png )
 
-LOGS_ALL = ${LOGS_IW} ${LOGS_12BDP} ${LOGS_23BDP} 
+LOGS_LEO = ${LOGS_IW_LEO} ${LOGS_12BDP_LEO} ${LOGS_23BDP_LEO}
 
 PLOTS_CWND = ${LOGS_IW_CWND} ${LOGS_12BDP_CWND} ${LOGS_23BDP_CWND}
 
@@ -131,6 +137,14 @@ PLOTS_CWND = ${LOGS_IW_CWND} ${LOGS_12BDP_CWND} ${LOGS_23BDP_CWND}
 
 
 experiments_all: ${LOGS_ALL}
+
+experiments_LEO_IW: install_module_LEO_IW ${LOGS_IW_LEO}
+
+experiments_LEO_12: install_module_LEO_12BDP ${LOGS_12BDP_LEO}
+
+experiments_LEO_23: install_module_LEO_23BDP ${LOGS_23BDP_LEO}
+
+experiments_LEO: experiments_LEO_IW experiments_LEO_12 experiments_LEO_23 ${LOGS_LEO}
 
 
 experiments_test: ${LOGS_TEST}

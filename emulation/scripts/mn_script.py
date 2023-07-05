@@ -198,6 +198,7 @@ def doSimulation(log_root=None, cong_alg=None,
 
     print("Copying packet captuires to %s" % save_root)
     os.system("mv /home/vagrant/tmp/*pcap %s" % save_root)
+    os.system("cp /vagrant/module_params.info %s" % save_root)
     net.stop()
 
 
@@ -212,4 +213,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     doSimulation(cong_alg=args.cong_alg, transfer_size=args.transfer_size, log_root=args.log_root, network_model_file=args.network_model_file)
+
+    experiment_info = vars(args)
+    with open(args.network_model_file) as f:
+        link_props = json.load(f)
+        experiment_info['link_info'] = link_props['changes']
+
+    with open(os.path.join(args.log_root, 'experiment.info'), 'w') as f:
+	    json.dump(experiment_info, f)
 
