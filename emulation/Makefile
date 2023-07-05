@@ -21,7 +21,22 @@ endif
 # 1/2 BDP = 208
 # 2/3 BDP = 278
 
+
 install_module_LEO_IW: module
+	python3 /vagrant/scripts/analytics/load_cubic_module.py --module_dir ${MODULE_DIR} --IW 10 --USE_JUMP 0 --JUMP 0 --hystart 1
+
+install_module_LEO_12BDP: module
+	python3 /vagrant/scripts/analytics/load_cubic_module.py --module_dir ${MODULE_DIR} --IW 10 --USE_JUMP 1 --JUMP 208 --hystart 1
+
+install_module_LEO_23BDP: module
+	python3 /vagrant/scripts/analytics/load_cubic_module.py --module_dir ${MODULE_DIR} --IW 10 --USE_JUMP 1 --JUMP 278 --hystart 1
+
+
+# GEO BDP = 1146
+# 1/2 BDP = 573
+# 2/3 BDP = 764
+
+install_module_GEO_IW: module
 ifneq ($(IW),)
 	cd $(MODULE_DIR) && sudo make install_cubic_cr IW=$(IW)
 else
