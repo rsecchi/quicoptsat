@@ -75,19 +75,33 @@ LOGS_IW_LEO_PACING = $(foreach size, ${FILE_SIZES}, $(foreach repeat, $(shell se
 LOGS_12BDP_LEO_PACING = $(foreach size, ${FILE_SIZES}, $(foreach repeat, $(shell seq 1 5), /vagrant/logs/pacing/LEO/cubic_cr/12BDP/${size}/${repeat}/experiment.info ))
 LOGS_23BDP_LEO_PACING = $(foreach size, ${FILE_SIZES}, $(foreach repeat, $(shell seq 1 5), /vagrant/logs/pacing/LEO/cubic_cr/23BDP/${size}/${repeat}/experiment.info ))
 
+LOGS_IW_LEO_HPP = $(foreach size, ${FILE_SIZES}, /vagrant/logs/LEO/cubic_hpp/IW/${size}/experiment.info )
+LOGS_12BDP_LEO_HPP = $(foreach size, ${FILE_SIZES}, /vagrant/logs/LEO/cubic_hpp/12BDP/${size}/experiment.info )
+LOGS_23BDP_LEO_HPP = $(foreach size, ${FILE_SIZES}, /vagrant/logs/LEO/cubic_hpp/23BDP/${size}/experiment.info )
+
+LOGS_IW_LEO_HPP_PACING = $(foreach size, ${FILE_SIZES}, $(foreach repeat, $(shell seq 1 5), /vagrant/logs/pacing/LEO/cubic_hpp/IW/${size}/${repeat}/experiment.info ))
+LOGS_12BDP_LEO_HPP_PACING = $(foreach size, ${FILE_SIZES}, $(foreach repeat, $(shell seq 1 5), /vagrant/logs/pacing/LEO/cubic_hpp/12BDP/${size}/${repeat}/experiment.info ))
+LOGS_23BDP_LEO_HPP_PACING = $(foreach size, ${FILE_SIZES}, $(foreach repeat, $(shell seq 1 5), /vagrant/logs/pacing/LEO/cubic_hpp/23BDP/${size}/${repeat}/experiment.info ))
+
+LOGS_IW_LEO_SS = $(foreach size, ${FILE_SIZES}, /vagrant/logs/LEO/cubic_cr_ss/IW/${size}/experiment.info )
 
 LOGS_IW_GEO_PACING = $(foreach size, ${FILE_SIZES}, /vagrant/logs/pacing/GEO/cubic_cr/IW/${size}/experiment.info )
 LOGS_12BDP_GEO_PACING = $(foreach size, ${FILE_SIZES}, /vagrant/logs/pacing/GEO/cubic_cr/12BDP/${size}/experiment.info )
 LOGS_23BDP_GEO_PACING = $(foreach size, ${FILE_SIZES}, /vagrant/logs/pacing/GEO/cubic_cr/23BDP/${size}/experiment.info )
 
+LOGS_IW_GEO_HPP = $(foreach size, ${FILE_SIZES}, /vagrant/logs/GEO/cubic_hpp/IW/${size}/experiment.info )
+LOGS_12BDP_GEO_HPP = $(foreach size, ${FILE_SIZES}, /vagrant/logs/GEO/cubic_hpp/12BDP/${size}/experiment.info )
+LOGS_23BDP_GEO_HPP = $(foreach size, ${FILE_SIZES}, /vagrant/logs/GEO/cubic_hpp/23BDP/${size}/experiment.info )
 
-LOGS_IW_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/IW/${size}/cwnd.png )
-LOGS_12BDP_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/12BDP/${size}/cwnd.png )
-LOGS_23BDP_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/23BDP/${size}/cwnd.png )
+LOGS_IW_GEO_HPP_PACING = $(foreach size, ${FILE_SIZES}, /vagrant/logs/pacing/GEO/cubic_hpp/IW/${size}/experiment.info )
+LOGS_12BDP_GEO_HPP_PACING = $(foreach size, ${FILE_SIZES}, /vagrant/logs/pacing/GEO/cubic_hpp/12BDP/${size}/experiment.info )
+LOGS_23BDP_GEO_HPP_PACING = $(foreach size, ${FILE_SIZES}, /vagrant/logs/pacing/GEO/cubic_hpp/23BDP/${size}/experiment.info )
 
 LOGS_LEO = ${LOGS_IW_LEO} ${LOGS_12BDP_LEO} ${LOGS_23BDP_LEO}
 LOGS_LEO_PACING = ${LOGS_IW_LEO_PACING} ${LOGS_12BDP_LEO_PACING} ${LOGS_23BDP_LEO_PACING}
+LOGS_LEO_HPP = ${LOGS_IW_LEO_HPP} ${LOGS_12BDP_LEO_HPP} ${LOGS_23BDP_LEO_HPP}
 LOGS_GEO_PACING = ${LOGS_IW_GEO_PACING} ${LOGS_12BDP_GEO_PACING} ${LOGS_23BDP_GEO_PACING}
+LOGS_GEO_HPP = ${LOGS_IW_GEO_HPP} ${LOGS_12BDP_GEO_HPP} ${LOGS_23BDP_GEO_HPP}
 
 PLOTS_CWND = ${LOGS_IW_CWND} ${LOGS_12BDP_CWND} ${LOGS_23BDP_CWND}
 
@@ -96,6 +110,10 @@ PLOTS_CWND = ${LOGS_IW_CWND} ${LOGS_12BDP_CWND} ${LOGS_23BDP_CWND}
 	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
 	sudo python ${ROOT}/scripts/mn_script.py --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE}
 
+
+##############
+# LOGS LEO
+##############
 
 # LOGS_IW
 /vagrant/logs/LEO/cubic_cr/IW/%/experiment.info: ${ROOT}/scripts/mn_script.py
@@ -139,6 +157,44 @@ PLOTS_CWND = ${LOGS_IW_CWND} ${LOGS_12BDP_CWND} ${LOGS_23BDP_CWND}
 	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
 
 
+# LOGS_IW
+/vagrant/logs/LEO/cubic_hpp/IW/%/experiment.info: ${ROOT}/scripts/mn_script.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
+
+
+# LOGS_12BDP
+/vagrant/logs/LEO/cubic_hpp/12BDP/%/experiment.info: ${ROOT}/scripts/mn_script.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
+
+
+# LOGS_23BDP
+/vagrant/logs/LEO/cubic_hpp/23BDP/%/experiment.info: ${ROOT}/scripts/mn_script.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
+
+
+# LOGS_IW
+/vagrant/logs/pacing/LEO/cubic_hpp/IW/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
+
+# LOGS 12 BDP
+/vagrant/logs/pacing/LEO/cubic_hpp/12BDP/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
+
+# LOGS 23 BDP
+/vagrant/logs/pacing/LEO/cubic_hpp/23BDP/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
 
 ##############
 # LOGS GEO
@@ -163,6 +219,49 @@ PLOTS_CWND = ${LOGS_IW_CWND} ${LOGS_12BDP_CWND} ${LOGS_23BDP_CWND}
 	$(eval OUTPUT_DIR = $(@D))
 	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
 	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
+
+
+# LOGS_IW
+/vagrant/logs/GEO/cubic_hpp/IW/%/experiment.info: ${ROOT}/scripts/mn_script.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
+
+
+# LOGS_12BDP
+/vagrant/logs/GEO/cubic_hpp/12BDP/%/experiment.info: ${ROOT}/scripts/mn_script.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
+
+
+# LOGS_23BDP
+/vagrant/logs/GEO/cubic_hpp/23BDP/%/experiment.info: ${ROOT}/scripts/mn_script.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
+
+
+# LOGS_IW
+/vagrant/logs/pacing/GEO/cubic_hpp/IW/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
+
+
+# LOGS_12BDP
+/vagrant/logs/pacing/GEO/cubic_hpp/12BDP/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
+
+
+# LOGS_23BDP
+/vagrant/logs/pacing/GEO/cubic_hpp/23BDP/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_hpp --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
+
 
 ##############
 # CWND Plots
@@ -206,6 +305,35 @@ experiments_LEO_23_PACING: install_module_LEO_23BDP ${LOGS_23BDP_LEO_PACING}
 experiments_LEO: experiments_LEO_IW experiments_LEO_12 experiments_LEO_23 ${LOGS_LEO}
 
 experiments_LEO_PACING: experiments_LEO_IW_PACING experiments_LEO_12_PACING experiments_LEO_23_PACING ${LOGS_LEO_PACING}
+
+experiments_LEO_IW_HPP: ${LOGS_IW_LEO_HPP}
+
+experiments_LEO_12_HPP: ${LOGS_12BDP_LEO_HPP}
+
+experiments_LEO_23_HPP: ${LOGS_23BDP_LEO_HPP}
+
+experiments_GEO_IW_HPP: ${LOGS_IW_GEO_HPP}
+
+experiments_GEO_12_HPP: ${LOGS_12BDP_GEO_HPP}
+
+experiments_GEO_23_HPP: ${LOGS_23BDP_GEO_HPP}
+
+
+##########
+# Pacing #
+##########
+
+experiments_LEO_IW_HPP_pacing: ${LOGS_IW_LEO_HPP_PACING}
+
+experiments_LEO_12_HPP_pacing: install_hpp_LEO_12BDP ${LOGS_12BDP_LEO_HPP_PACING}
+
+experiments_LEO_23_HPP_pacing: install_hpp_LEO_23BDP ${LOGS_23BDP_LEO_HPP_PACING}
+
+experiments_GEO_IW_HPP_pacing: ${LOGS_IW_GEO_HPP_PACING}
+
+experiments_GEO_12_HPP_pacing: install_hpp_GEO_12BDP ${LOGS_12BDP_GEO_HPP_PACING}
+
+experiments_GEO_23_HPP_pacing: install_hpp_GEO_23BDP ${LOGS_23BDP_GEO_HPP_PACING}
 
 experiments_test: ${LOGS_TEST}
 
