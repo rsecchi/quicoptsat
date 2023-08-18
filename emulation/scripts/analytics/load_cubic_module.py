@@ -1,6 +1,7 @@
 import argparse
 import subprocess
 import json
+import time
 
 
 if __name__ == '__main__':
@@ -10,10 +11,20 @@ if __name__ == '__main__':
         exit(1)
     elif is_loaded_output.stdout:
         print("Unloading existing module...")
-        rm_process = subprocess.run('sudo rmmod tcp_cubic_cr', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if rm_process.returncode != 0 or rm_process.stderr:
-            print(rm_process.stderr.decode())
-            exit(1)
+        retries = 3
+        MAX_RETRIES = retries
+        while retries > 0:
+            rm_process = subprocess.run('sudo rmmod tcp_cubic_cr', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if rm_process.returncode != 0 or rm_process.stderr:
+                print(rm_process.stderr.decode())
+                if retries > 0:
+                    retries -= 1
+                    print(f"Retrying to unload module... {MAX_RETRIES - retries}")
+                    time.sleep(3)
+                    continue
+                print(f"Gave up after {MAX_RETRIES} attempts.")
+                exit(1)
+            break
         subprocess.run('sudo rm -rf /vagrant/module_params.info', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print("Done")
 
