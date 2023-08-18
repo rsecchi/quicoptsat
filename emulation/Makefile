@@ -71,10 +71,14 @@ LOGS_IW = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cu
 LOGS_12BDP = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/12BDP/${size}/experiment.info )
 LOGS_23BDP = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/23BDP/${size}/experiment.info )
 
+LOGS_IW_LEO_PACING = $(foreach size, ${FILE_SIZES}, $(foreach repeat, $(shell seq 1 5), /vagrant/logs/pacing/LEO/cubic_cr/IW/${size}/${repeat}/experiment.info ))
+LOGS_12BDP_LEO_PACING = $(foreach size, ${FILE_SIZES}, $(foreach repeat, $(shell seq 1 5), /vagrant/logs/pacing/LEO/cubic_cr/12BDP/${size}/${repeat}/experiment.info ))
+LOGS_23BDP_LEO_PACING = $(foreach size, ${FILE_SIZES}, $(foreach repeat, $(shell seq 1 5), /vagrant/logs/pacing/LEO/cubic_cr/23BDP/${size}/${repeat}/experiment.info ))
 
-LOGS_IW_GEO = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/GEO/cubic_cr/IW/${size}/experiment.info )
-LOGS_12BDP_GEO = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/GEO/cubic_cr/12BDP/${size}/experiment.info )
-LOGS_23BDP_GEO = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/GEO/cubic_cr/23BDP/${size}/experiment.info )
+
+LOGS_IW_GEO_PACING = $(foreach size, ${FILE_SIZES}, /vagrant/logs/pacing/GEO/cubic_cr/IW/${size}/experiment.info )
+LOGS_12BDP_GEO_PACING = $(foreach size, ${FILE_SIZES}, /vagrant/logs/pacing/GEO/cubic_cr/12BDP/${size}/experiment.info )
+LOGS_23BDP_GEO_PACING = $(foreach size, ${FILE_SIZES}, /vagrant/logs/pacing/GEO/cubic_cr/23BDP/${size}/experiment.info )
 
 
 LOGS_IW_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/IW/${size}/cwnd.png )
@@ -82,6 +86,8 @@ LOGS_12BDP_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/log
 LOGS_23BDP_CWND = $(foreach size, $(shell seq 50000 50000 5000000), /vagrant/logs/LEO/cubic_cr/23BDP/${size}/cwnd.png )
 
 LOGS_LEO = ${LOGS_IW_LEO} ${LOGS_12BDP_LEO} ${LOGS_23BDP_LEO}
+LOGS_LEO_PACING = ${LOGS_IW_LEO_PACING} ${LOGS_12BDP_LEO_PACING} ${LOGS_23BDP_LEO_PACING}
+LOGS_GEO_PACING = ${LOGS_IW_GEO_PACING} ${LOGS_12BDP_GEO_PACING} ${LOGS_23BDP_GEO_PACING}
 
 PLOTS_CWND = ${LOGS_IW_CWND} ${LOGS_12BDP_CWND} ${LOGS_23BDP_CWND}
 
@@ -110,6 +116,53 @@ PLOTS_CWND = ${LOGS_IW_CWND} ${LOGS_12BDP_CWND} ${LOGS_23BDP_CWND}
 	$(eval OUTPUT_DIR = $(@D))
 	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
 	sudo python ${ROOT}/scripts/mn_script.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
+
+
+# LOGS_IW
+/vagrant/logs/pacing/LEO/cubic_cr/IW/%/experiment.info /vagrant/logs/pacing/LEO/cubic_cr_ss/IW/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(shell dirname $(@D)))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
+
+
+# LOGS_12BDP
+/vagrant/logs/pacing/LEO/cubic_cr/12BDP/%/experiment.info /vagrant/logs/pacing/LEO/cubic_cr_ss/12BDP/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(shell dirname $(@D)))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
+
+
+# LOGS_23BDP
+/vagrant/logs/pacing/LEO/cubic_cr/23BDP/%/experiment.info /vagrant/logs/pacing/LEO/cubic_cr_ss/23BDP/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(shell dirname $(@D)))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/LEO.json
+
+
+
+##############
+# LOGS GEO
+##############
+
+# LOGS_IW
+/vagrant/logs/pacing/GEO/cubic_cr/IW/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
+
+
+# LOGS_12BDP
+/vagrant/logs/pacing/GEO/cubic_cr/12BDP/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
+
+
+# LOGS_23BDP
+/vagrant/logs/pacing/GEO/cubic_cr/23BDP/%/experiment.info: ${ROOT}/scripts/mn_script_pacing.py
+	$(eval OUTPUT_DIR = $(@D))
+	$(eval TRANSFER_SIZE = $(shell echo $(shell basename $(@D))))
+	sudo python ${ROOT}/scripts/mn_script_pacing.py --log_root ${OUTPUT_DIR} --cong_alg cubic_cr --transfer_size ${TRANSFER_SIZE} --network_model_file /vagrant/network_models/links/GEO.json
 
 ##############
 # CWND Plots
@@ -144,14 +197,25 @@ experiments_LEO_12: install_module_LEO_12BDP ${LOGS_12BDP_LEO}
 
 experiments_LEO_23: install_module_LEO_23BDP ${LOGS_23BDP_LEO}
 
+experiments_LEO_IW_PACING: install_module_LEO_IW ${LOGS_IW_LEO_PACING}
+
+experiments_LEO_12_PACING: install_module_LEO_12BDP ${LOGS_12BDP_LEO_PACING}
+
+experiments_LEO_23_PACING: install_module_LEO_23BDP ${LOGS_23BDP_LEO_PACING}
+
 experiments_LEO: experiments_LEO_IW experiments_LEO_12 experiments_LEO_23 ${LOGS_LEO}
 
+experiments_LEO_PACING: experiments_LEO_IW_PACING experiments_LEO_12_PACING experiments_LEO_23_PACING ${LOGS_LEO_PACING}
 
 experiments_test: ${LOGS_TEST}
 
+pacing: install_module_LEO_12BDP /vagrant/logs/pacing/_NON_EXISTANT_experiment.info 
 
 experiments_plots: ${PLOTS_CWND}
 
+plots_LEO_SS: ${PLOTS_CWND_SS}
+
+IETF_plots: /vagrant/logs/LEO/cubic_cr/12BDP/5000000/kern.log /vagrant/logs/pacing/kern.log /vagrant/scripts/analytics/plot_cwnd.py
 
 /vagrant/logs/DSL/cubic_cr/%/cwnd.png: /vagrant/logs/DSL/cubic_cr/%/kern.log /vagrant/scripts/analytics/plot_cwnd.py
 	python3 /vagrant/scripts/analytics/plot_cwnd.py --kern_log_path $< --save_path $@ --file_type png
