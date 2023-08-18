@@ -2,6 +2,7 @@ from mininet.topo import Topo
 from mininet.net import Mininet
 from mininet.node import CPULimitedHost
 from mininet.link import TCLink
+from mininet.cli import CLI
 
 import os
 import sys
@@ -10,6 +11,7 @@ import json
 import time
 import datetime
 import argparse
+
 
 precise_time_str = "%y-%m-%d-%H:%M:%S:%f"
 
@@ -162,7 +164,10 @@ def doSimulation(log_root=None, cong_alg=None,
         host.cmd('ethtool -K ' + str(host.intf()) + ' gso off')
         host.cmd('ethtool --offload ' + str(host.intf()) + ' tso off')
     
-    # Do Simulation
+    print("Setting large receive windows")
+    for host in [server, client]:
+        host.cmd('sudo bash set_all_mem.sh')
+        # host.cmd('sudo sysctl -p newctl.conf')
 
     pcap_tmp_path = '/home/vagrant/tmp'
     if log_root:
