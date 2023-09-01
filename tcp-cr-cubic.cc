@@ -86,6 +86,16 @@ TcpCubicCr::GetTypeId()
                           TimeValue(MilliSeconds(2)),
                           MakeTimeAccessor(&TcpCubicCr::m_lastRtt),
                           MakeTimeChecker())
+            .AddAttribute("ssthreshReset",
+                          "Multiplier for ssthresh after Unvalidated",
+                          DoubleValue(0.0),
+                          MakeDoubleAccessor(&TcpCubicCr::m_ssthreshReset),
+                          MakeDoubleChecker<double>(0.0))
+            .AddAttribute("ProgressiveGrowth",
+                          "Enable (true) or disable (false) Progressive Growth",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&TcpCubicCr::m_progGrowth),
+                          MakeBooleanChecker())
             .AddAttribute("HyStartDetect",
                           "Hybrid Slow Start detection mechanisms:"
                           "1: packet train, 2: delay, 3: both",
@@ -144,13 +154,16 @@ TcpCubicCr::TcpCubicCr()
       m_found(0),
       m_lastWindow(10),
       m_lastRtt(Time::Min()),
-      m_crState(TcpCubicCr::CarefulResumeState::CR_RECON),
+      m_crState(CarefulResumeState::CR_RECON),
+      m_ssthreshReset(0),
+      m_progGrowth(false),
       m_roundStart(Time::Min()),
       m_endSeq(0),
       m_lastAck(Time::Min()),
       m_cubicDelta(Time::Min()),
       m_currRtt(Time::Min()),
       m_sampleCnt(0),
+      m_limit(SequenceNumber32(0)),
       m_hystartRounds(0),
       m_divisor(1),
       m_baselineRtt(Time::Min())
@@ -182,12 +195,15 @@ TcpCubicCr::TcpCubicCr(const TcpCubicCr& sock)
       m_lastWindow(sock.m_lastWindow),
       m_lastRtt(sock.m_lastRtt),
       m_crState(sock.m_crState),
+      m_ssthreshReset(sock.m_ssthreshReset),
+      m_progGrowth(sock.m_progGrowth),
       m_roundStart(sock.m_roundStart),
       m_endSeq(sock.m_endSeq),
       m_lastAck(sock.m_lastAck),
       m_cubicDelta(sock.m_cubicDelta),
       m_currRtt(sock.m_currRtt),
       m_sampleCnt(sock.m_sampleCnt),
+      m_limit(sock.m_limit),
       m_hystartRounds(sock.m_hystartRounds),
       m_divisor(sock.m_divisor),
       m_baselineRtt(sock.m_baselineRtt)
@@ -210,6 +226,8 @@ TcpCubicCr::HystartReset(Ptr<const TcpSocketState> tcb)
     m_endSeq = tcb->m_highTxMark;
     m_currRtt = Time::Min();
     m_sampleCnt = 0;
+    // m_limit = SequenceNumber32(0);
+	// std::cout<<"crap";
 }
 
 void
@@ -353,42 +371,55 @@ TcpCubicCr::Update(Ptr<TcpSocketState> tcb)
 void
 TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt)
 {
-    uint32_t limit_bytes;
-    SequenceNumber32 limit;
+    uint32_t limit_bytes, target_bytes;
 
     NS_LOG_FUNCTION(this << tcb << segmentsAcked << rtt);
 
     /* Careful Resume */
-    if (m_crState == TcpCubicCr::CarefulResumeState::CR_RECON)
+    if (m_crState == CarefulResumeState::CR_RECON)
     {
         /* Actions to perform in Recoinassance phase */
         if (rtt <= m_lastRtt/10 || rtt >= m_lastRtt*10)
         {
             /* Drop plans to jump because past RTT is too different */
-            m_crState = TcpCubicCr::CarefulResumeState::CR_NORMAL;
+            m_crState = CarefulResumeState::CR_NORMAL;
+			printf("Dropping jump!\n");
         }
         limit_bytes = tcb->m_segmentSize * (tcb->m_initialCWnd-1);
-        SequenceNumber32 limit = SequenceNumber32(limit_bytes);
+        m_limit = SequenceNumber32(limit_bytes);
+		std::cout << " <0> ";
 
-        if (tcb->m_lastAckedSeq >= limit) {
+        if (m_progGrowth) {
+            target_bytes = tcb->m_segmentSize * segmentsAcked *
+                            (m_lastWindow - tcb->m_initialCWnd);
+//			printf("increase=%u iw=%u segmentsAcked=%u\n", target_bytes/tcb->m_initialCWnd, tcb->m_initialCWnd, segmentsAcked);
+
+            tcb->m_cWnd += target_bytes / tcb->m_initialCWnd; 
+        }
+
+        if (tcb->m_lastAckedSeq >= m_limit) {
             /* Switch to Unvalidated phase */
-            m_crState = TcpCubicCr::CarefulResumeState::CR_UNVAL;
+            m_crState = CarefulResumeState::CR_UNVAL;
 
-            /* Calculate new seqno boundaty for cwnd validation */
+            /* Calculate new seqno boundary for cwnd validation */
             limit_bytes += tcb->m_segmentSize * m_lastWindow;
-            limit = SequenceNumber32(limit_bytes);
+            m_limit = SequenceNumber32(limit_bytes);
+			std::cout << "TRIGGER" << m_limit << "PPP";
 
             tcb->m_cWnd = limit_bytes;
         }
         return;
     }
 
-    if (m_crState == TcpCubicCr::CarefulResumeState::CR_UNVAL) 
+    if (m_crState == CarefulResumeState::CR_UNVAL) 
     {
         /* Actions to perform in Unvalidated phase */
-        if (tcb->m_lastAckedSeq >= limit) {
+        if (tcb->m_lastAckedSeq >= m_limit) {
            /* Previous cwnd is now validated, resume normally */
-            m_crState = TcpCubicCr::CarefulResumeState::CR_NORMAL;
+			std::cout << "ACKED" << tcb->m_lastAckedSeq << ":" << m_limit << "$$$";
+            m_crState = CarefulResumeState::CR_NORMAL;
+            if (m_ssthreshReset>0)
+                tcb->m_ssThresh = m_ssthreshReset*tcb->m_cWnd; 
         }
     }
 
@@ -519,6 +550,15 @@ TcpCubicCr::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
 {
     NS_LOG_FUNCTION(this << tcb << bytesInFlight);
 
+	
+	if (m_crState == CarefulResumeState::CR_RECOVERY) 
+	{
+		printf("Operation at recovery\n");
+		m_crState = CarefulResumeState::CR_NORMAL;
+		return 2 * tcb->m_segmentSize * tcb->m_initialCWnd;
+	}
+	
+
     uint32_t segCwnd = tcb->GetCwndInSegments();
     NS_LOG_DEBUG("Loss at cWnd=" << segCwnd
                                  << " segments in flight=" << bytesInFlight / tcb->m_segmentSize);
@@ -548,10 +588,14 @@ TcpCubicCr::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::Tc
 {
     NS_LOG_FUNCTION(this << tcb << newState);
 
-    if (newState == TcpSocketState::CA_RECOVERY || 
-        newState == TcpSocketState::CA_LOSS)
+	std::cout << newState << "," << m_crState << "    "<< std::endl;
+
+    if (m_crState == CarefulResumeState::CR_UNVAL &&
+		(newState == TcpSocketState::CA_RECOVERY || 
+        newState == TcpSocketState::CA_LOSS))
     {
-        m_crState = TcpCubicCr::CarefulResumeState::CR_NORMAL;
+		printf("sw");
+        m_crState = CarefulResumeState::CR_RECOVERY;
     }
 
     if (newState == TcpSocketState::CA_LOSS)
@@ -578,6 +622,82 @@ TcpCubicCr::Fork()
 {
     NS_LOG_FUNCTION(this);
     return CopyObject<TcpCubicCr>(this);
+}
+
+
+// Careful Resume Recovery 
+
+
+NS_OBJECT_ENSURE_REGISTERED(TcpCrRecovery);
+
+TypeId
+TcpCrRecovery::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::TcpCrRecovery")
+                            .SetParent<TcpClassicRecovery>()
+                            .SetGroupName("Internet")
+                            .AddConstructor<TcpCrRecovery>();
+    return tid;
+}
+
+TcpCrRecovery::TcpCrRecovery()
+    : TcpClassicRecovery()
+{
+    NS_LOG_FUNCTION(this);
+}
+
+TcpCrRecovery::TcpCrRecovery(const TcpCrRecovery& sock)
+    : TcpClassicRecovery(sock)
+{
+    NS_LOG_FUNCTION(this);
+}
+
+TcpCrRecovery::~TcpCrRecovery()
+{
+    NS_LOG_FUNCTION(this);
+}
+
+
+void
+TcpCrRecovery::EnterRecovery(Ptr<TcpSocketState> tcb,
+                                  uint32_t dupAckCount,
+                                  uint32_t unAckDataCount [[maybe_unused]],
+                                  uint32_t deliveredBytes [[maybe_unused]])
+{
+    NS_LOG_FUNCTION(this << tcb << dupAckCount << unAckDataCount);
+    tcb->m_cWnd = tcb->m_ssThresh;
+    tcb->m_cWndInfl = tcb->m_ssThresh + (dupAckCount * tcb->m_segmentSize);
+}
+
+void
+TcpCrRecovery::DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes [[maybe_unused]])
+{
+    NS_LOG_FUNCTION(this << tcb << deliveredBytes);
+    tcb->m_cWndInfl += tcb->m_segmentSize;
+}
+
+void
+TcpCrRecovery::ExitRecovery(Ptr<TcpSocketState> tcb)
+{
+    NS_LOG_FUNCTION(this << tcb);
+    // Follow NewReno procedures to exit FR if SACK is disabled
+    // (RFC2582 sec.3 bullet #5 paragraph 2, option 2)
+    // In this implementation, actual m_cWnd value is reset to ssThresh
+    // immediately before calling ExitRecovery(), so we just need to
+    // reset the inflated cWnd trace variable
+    tcb->m_cWndInfl = tcb->m_ssThresh.Get();
+}
+
+std::string
+TcpCrRecovery::GetName() const
+{
+    return "TcpCrRecovery";
+}
+
+Ptr<TcpRecoveryOps>
+TcpCrRecovery::Fork()
+{
+    return CopyObject<TcpCrRecovery>(this);
 }
 
 } // namespace ns3

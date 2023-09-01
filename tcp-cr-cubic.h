@@ -20,10 +20,15 @@
 #define TCPCUBIC_H
 
 #include "ns3/tcp-congestion-ops.h"
+#include "ns3/tcp-recovery-ops.h"
 #include "ns3/tcp-socket-base.h"
 
 namespace ns3
 {
+
+
+class TcpSocketState;
+
 
 /**
  * \brief The Cubic Congestion Control Algorithm
@@ -102,6 +107,7 @@ class TcpCubicCr : public TcpCongestionOps
     {
         CR_RECON,    //!< Reconaissance State
         CR_UNVAL,    //!< Unvalidated Period after jump
+		CR_RECOVERY, //!< Recovery following loss after jump
         CR_NORMAL    //!< Standard congestion control
     };
 
@@ -147,6 +153,8 @@ class TcpCubicCr : public TcpCongestionOps
 	uint32_t m_lastWindow;     //!< window adjust at the start of Unv. Period
 	Time m_lastRtt;            //!< Careful Resume estimation of the path RTT
 	uint32_t m_crState;        //!< Careful Resume state machine 
+    double m_ssthreshReset;    //!< ssthresh multiplier at the end of Invalidated (0==disabled)
+    bool m_progGrowth;         //!< Progressive growth during Reiconassance
 
     Time m_roundStart;         //!<  Beginning of each round
     SequenceNumber32 m_endSeq; //!<  End sequence of the round
@@ -154,6 +162,7 @@ class TcpCubicCr : public TcpCongestionOps
     Time m_cubicDelta;         //!<  Time to wait after recovery before update
     Time m_currRtt;            //!<  Current Rtt
     uint32_t m_sampleCnt;      //!<  Count of samples for HyStart
+	SequenceNumber32 m_limit;  //!<  Mark for jumping
 
     // Hystart++ parameters
     uint32_t m_hystartRounds;
@@ -205,6 +214,49 @@ class TcpCubicCr : public TcpCongestionOps
     Time HystartDelayThresh(const Time& t) const;
 };
 
+
+class TcpCrRecovery : public TcpClassicRecovery 
+{
+  public:
+    /**
+     * \brief Get the type ID.
+     * \return the object TypeId
+     */
+    static TypeId GetTypeId();
+
+    /**
+     * \brief Constructor
+     */
+    TcpCrRecovery();
+
+    /**
+     * \brief Copy constructor.
+     * \param recovery object to copy.
+     */
+    TcpCrRecovery(const TcpCrRecovery& recovery);
+
+    /**
+     * \brief Constructor
+     */
+    ~TcpCrRecovery() override;
+
+    std::string GetName() const override;
+
+    void EnterRecovery(Ptr<TcpSocketState> tcb,
+                       uint32_t dupAckCount,
+                       uint32_t unAckDataCount,
+                       uint32_t deliveredBytes) override;
+
+    void DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes) override;
+
+    void ExitRecovery(Ptr<TcpSocketState> tcb) override;
+
+    Ptr<TcpRecoveryOps> Fork() override;
+};
+
+
+
 } // namespace ns3
 
 #endif // TCPCUBIC_H
+

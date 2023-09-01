@@ -12,6 +12,9 @@
 #include "ns3/fq-codel-queue-disc.h"
 #include "ns3/packet.h"
 
+#include "ns3/pcap-file.h"
+#include "ns3/pcap-file-wrapper.h"
+
 #include <fstream>
 #include <memory>
 #include <string>
@@ -31,6 +34,7 @@ void list_aggregates(Ptr<Object> p) {
 uint32_t num_flows = 1;
 std::ofstream cwnd[10];
 std::ofstream rtt[10];
+std::ofstream flightsize[10];
 std::ofstream bttln_queue;
 
 /* function callback to print the congestion window */
@@ -56,6 +60,12 @@ static void RttTracer(std::string context, Time oldval, Time newval)
 	rtt[socket] << Simulator::Now().GetSeconds() << " " << newval.GetSeconds() << std::endl;
 }
 
+static void FlightSizeTracer(std::string context, uint32_t  oldval, uint32_t newval)
+{
+	uint32_t socket = int(context[43] - 48);
+	flightsize[socket] << Simulator::Now().GetSeconds() << " " << oldval << std::endl;
+	flightsize[socket] << Simulator::Now().GetSeconds() << " " << newval << std::endl;
+}
 
 /* function callback when a transfer is completed*/
 void Completed(Ptr<Socket> sock)
@@ -82,6 +92,7 @@ void SocketTraces(uint32_t i, Ptr<BulkSendApplication> bulk) {
 	Config::Connect(name + "/CongestionWindow", MakeCallback(&CwndTracer));
 	Config::Connect(name + "/RTT", MakeCallback(&RttTracer));
 	// Config::Connect(name + "/RWND", MakeCallback(&RWNDTracer));
+	Config::Connect(name + "/BytesInFlight", MakeCallback(&FlightSizeTracer));
 
 	/* access to the socket */
 	Ptr<Socket> socket = bulk->GetSocket();
@@ -105,9 +116,11 @@ int main(int argc, char* argv[])
 	double error_p = 0.0;
 	double duration = 100.0;
 	double offset = 0.001;
+    double ssthresh_reset = 0.0;
 	uint64_t data_kbytes = 1000;
 	bool boolp = false;
 	bool boolp_iw = false;
+    bool boolpg = false;
 
 	std::string transport_prot = "TcpCubic";
 	std::string bandwidth = "5Mbps";
@@ -115,12 +128,15 @@ int main(int argc, char* argv[])
 	std::string last_rtt = "10ms";
 	std::string last_cwnd = "10";
 	std::string qlen = "100p";
-	std::string mtu = "1500";
+	std::string mtu = "1440";
 	std::string pacing = "0";
 	std::string pacing_iw = "0";
+    std::string prog_growth = "0";
 	std::string hs = "0";
 	std::string hspp = "0";
 	std::string ss_pacing_ratio = "200";
+    std::string max_pacing_rate = "1Gbps";
+	std::string recovery = "ns3::TcpClassicRecovery";
 
 	CommandLine cmd(__FILE__);
 	cmd.AddValue("num_flows", "Number of flows", num_flows);
@@ -138,10 +154,14 @@ int main(int argc, char* argv[])
 	cmd.AddValue("pacing", "Enable Pacing (0/1)", pacing);
 	cmd.AddValue("pacing_iw", "Enable Pacing for IW (0/1)", pacing_iw);
 	cmd.AddValue("ss_pacing_ratio", "pacing perc. increase in SS", ss_pacing_ratio);
+	cmd.AddValue("max_pacing_rate", "Maximum Pacing Rate", max_pacing_rate);
 	cmd.AddValue("hystartpp", "Enable Hystart++", hspp);
 	cmd.AddValue("hystart", "Enable Hystart++", hs);
 	cmd.AddValue("last_rtt", "Careful Resume stored RTT", last_rtt);
 	cmd.AddValue("last_cwnd", "Careful Resume stored cwnd", last_cwnd);
+    cmd.AddValue("ssthresh_reset", "Multiplier for ssthresh", ssthresh_reset);
+    cmd.AddValue("prog_growth", "Progressive growth in Reiconassance", prog_growth);
+	cmd.AddValue("recovery", "Define the Safe Retreat Recovery algorithm", recovery);
 	cmd.Parse(argc, argv);
 
 	if (pacing == "1")
@@ -149,6 +169,9 @@ int main(int argc, char* argv[])
 
 	if (pacing_iw == "1")
 		boolp_iw = true;
+
+	if (prog_growth == "1")
+		boolpg = true;
 
 	if (hspp == "1")
 	{
@@ -164,6 +187,7 @@ int main(int argc, char* argv[])
 	Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(boolp));
 	Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(boolp_iw));
 	Config::SetDefault("ns3::TcpSocketState::PacingSsRatio", UintegerValue(stoi(ss_pacing_ratio)));
+	Config::SetDefault("ns3::TcpSocketState::MaxPacingRate", StringValue(max_pacing_rate));
 	
 	// Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(iw));
 	Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(327680000));
@@ -175,10 +199,19 @@ int main(int argc, char* argv[])
 	transport_prot = "ns3::" + transport_prot;
 	Config::SetDefault("ns3::TcpL4Protocol::SocketType",
 		TypeIdValue(TypeId::LookupByName(transport_prot)));
+	Config::SetDefault("ns3::TcpL4Protocol::RecoveryType",
+		TypeIdValue(TypeId::LookupByName(recovery)));
+
 	Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(std::stoi(mtu)));
 
 	Config::SetDefault("ns3::TcpCubicCr::LastRtt", StringValue(last_rtt));
 	Config::SetDefault("ns3::TcpCubicCr::LastWindow", UintegerValue(std::stoi(last_cwnd)));
+    Config::SetDefault("ns3::TcpCubicCr::ssthreshReset", DoubleValue(ssthresh_reset));
+	Config::SetDefault("ns3::TcpCubicCr::ProgressiveGrowth", BooleanValue(boolpg));
+
+    //PcapFileWrapper::Enable("output.pcap", std::ios::out, PcapFile::DLT_EN10MB);
+
+
 
 	SeedManager::SetSeed(seed);
 	SeedManager::SetRun(run);
@@ -209,7 +242,7 @@ int main(int argc, char* argv[])
 	Ipv4AddressHelper address;
 	address.SetBase("10.1.1.0", "255.255.255.0");
 	Ipv4InterfaceContainer ifv4 = address.Assign(devs);
-	// pp.EnablePcapAll("tcpsat");
+	pp.EnablePcapAll("tcpsat");
 
 
 	//list_aggregates(nodes.Get(0));
@@ -233,6 +266,7 @@ int main(int argc, char* argv[])
 		apps.Start(Seconds(i*offset));
 		cwnd[i].open("cwnd" + std::to_string(i) + ".tr", std::ios::out);
 		rtt[i].open("rtt" + std::to_string(i) + ".tr", std::ios::out);
+		flightsize[i].open("flightsize" + std::to_string(i) + ".tr", std::ios::out);
 	
 		/* get reference to bulk application */
 		Ptr<BulkSendApplication> bulk;
@@ -254,8 +288,8 @@ int main(int argc, char* argv[])
 	}
 
 	/* start simulation */
-	// FlowMonitorHelper fmon;
-	// fmon.InstallAll();
+	//FlowMonitorHelper fmon;
+	//fmon.InstallAll();
 	Simulator::Stop(Seconds(duration));
 	Simulator::Run();
 
