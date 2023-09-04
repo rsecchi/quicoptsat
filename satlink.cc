@@ -18,6 +18,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <type_traits>
 
 
 using namespace ns3;
@@ -33,6 +34,7 @@ void list_aggregates(Ptr<Object> p) {
 
 uint32_t num_flows = 1;
 std::ofstream cwnd[10];
+std::ofstream ssthresh[10];
 std::ofstream rtt[10];
 std::ofstream flightsize[10];
 std::ofstream bttln_queue;
@@ -48,7 +50,9 @@ static void CwndTracer(std::string context, uint32_t oldval, uint32_t newval)
 
 static void RWNDTracer(std::string context, uint32_t oldval, uint32_t newval)
 {
- 	std::cout << Simulator::Now().GetSeconds() << " " << oldval << std::endl;
+	uint32_t socket = int(context[43] - 48);
+	ssthresh[socket] << Simulator::Now().GetSeconds() << " " << oldval << std::endl;
+	ssthresh[socket] << Simulator::Now().GetSeconds() << " " << newval << std::endl;
 
 }
 
@@ -91,7 +95,7 @@ void SocketTraces(uint32_t i, Ptr<BulkSendApplication> bulk) {
 
 	Config::Connect(name + "/CongestionWindow", MakeCallback(&CwndTracer));
 	Config::Connect(name + "/RTT", MakeCallback(&RttTracer));
-	// Config::Connect(name + "/RWND", MakeCallback(&RWNDTracer));
+	Config::Connect(name + "/SlowStartThreshold", MakeCallback(&RWNDTracer));
 	Config::Connect(name + "/BytesInFlight", MakeCallback(&FlightSizeTracer));
 
 	/* access to the socket */
@@ -267,6 +271,7 @@ int main(int argc, char* argv[])
 		cwnd[i].open("cwnd" + std::to_string(i) + ".tr", std::ios::out);
 		rtt[i].open("rtt" + std::to_string(i) + ".tr", std::ios::out);
 		flightsize[i].open("flightsize" + std::to_string(i) + ".tr", std::ios::out);
+		ssthresh[i].open("ssthresh" + std::to_string(i) + ".tr", std::ios::out);
 	
 		/* get reference to bulk application */
 		Ptr<BulkSendApplication> bulk;

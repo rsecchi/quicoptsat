@@ -21,6 +21,7 @@
 
 #include "ns3/tcp-congestion-ops.h"
 #include "ns3/tcp-recovery-ops.h"
+#include "ns3/tcp-rate-ops.h"
 #include "ns3/tcp-socket-base.h"
 
 namespace ns3
@@ -252,6 +253,13 @@ class TcpCrRecovery : public TcpClassicRecovery
     void ExitRecovery(Ptr<TcpSocketState> tcb) override;
 
     Ptr<TcpRecoveryOps> Fork() override;
+
+  private:
+	Time m_enterRecoveryTime;    // Time the recovery was started
+	Time m_rttLastAck;           // RTT sample at recovery entry
+	Time m_probeEnd;             // Time the jump probe is expected to be ACKed.
+	bool m_cr_done;
+
 };
 
 
