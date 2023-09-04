@@ -100,19 +100,6 @@ class TcpCubicCr : public TcpCongestionOps
 
   private:
 
-
-    /**
-     * \brief Values to detect the Slow Start mode of HyStart
-     */
-    enum CarefulResumeState
-    {
-        CR_RECON,    //!< Reconaissance State
-        CR_UNVAL,    //!< Unvalidated Period after jump
-		CR_RECOVERY, //!< Recovery following loss after jump
-        CR_NORMAL    //!< Standard congestion control
-    };
-
-
     /**
      * \brief Values to detect the Slow Start mode of HyStart
      */
@@ -258,7 +245,7 @@ class TcpCrRecovery : public TcpClassicRecovery
 	Time m_enterRecoveryTime;    // Time the recovery was started
 	Time m_rttLastAck;           // RTT sample at recovery entry
 	Time m_probeEnd;             // Time the jump probe is expected to be ACKed.
-	bool m_cr_done;
+	bool m_enablePipe;
 
 };
 

@@ -156,6 +156,20 @@ class TcpSocketState : public Object
                      //!< set in TCP header. This state is used for tracing.
     } EcnState_t;
 
+
+	/**
+	 * \brief Definition of the Careful Resume state machine
+     * 
+     */
+	typedef enum
+	{
+		CR_RECON,     // !< Recoinassance State
+        CR_UNVAL,     // !< Unvalidated Period after jump
+		CR_RECOVERY,  // !< Recovery following loss after jump
+		CR_NORMAL     // !< Standard congestion control
+	} CrState_t;
+
+
     /**
      * \brief Literal names of TCP states for use in log messages
      */
@@ -188,6 +202,8 @@ class TcpSocketState : public Object
 
     TracedValue<EcnState_t> m_ecnState{
         ECN_DISABLED}; //!< Current ECN State, represented as combination of EcnState values
+
+	TracedValue<CrState_t> m_crState{CR_RECON};
 
     TracedValue<SequenceNumber32> m_highTxMark{0}; //!< Highest seqno ever sent, regardless of ReTx
     TracedValue<SequenceNumber32> m_nextTxSequence{

@@ -107,6 +107,7 @@ TcpSocketState::TcpSocketState(const TcpSocketState& other)
       m_lastAckedSeq(other.m_lastAckedSeq),
       m_congState(other.m_congState),
       m_ecnState(other.m_ecnState),
+      m_crState(other.m_crState),
       m_highTxMark(other.m_highTxMark),
       m_nextTxSequence(other.m_nextTxSequence),
       m_rcvTimestampValue(other.m_rcvTimestampValue),

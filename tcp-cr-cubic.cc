@@ -154,7 +154,6 @@ TcpCubicCr::TcpCubicCr()
       m_found(0),
       m_lastWindow(10),
       m_lastRtt(Time::Min()),
-      m_crState(CarefulResumeState::CR_RECON),
       m_ssthreshReset(0),
       m_progGrowth(false),
       m_roundStart(Time::Min()),
@@ -376,13 +375,13 @@ TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Tim
     NS_LOG_FUNCTION(this << tcb << segmentsAcked << rtt);
 
     /* Careful Resume */
-    if (m_crState == CarefulResumeState::CR_RECON)
+    if (tcb->m_crState == TcpSocketState::CR_RECON)
     {
         /* Actions to perform in Recoinassance phase */
         if (rtt <= m_lastRtt/10 || rtt >= m_lastRtt*10)
         {
             /* Drop plans to jump because past RTT is too different */
-            m_crState = CarefulResumeState::CR_NORMAL;
+            tcb->m_crState = TcpSocketState::CR_NORMAL;
         }
         limit_bytes = tcb->m_segmentSize * (tcb->m_initialCWnd-1);
         m_limit = SequenceNumber32(limit_bytes);
@@ -397,7 +396,7 @@ TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Tim
 
         if (tcb->m_lastAckedSeq >= m_limit) {
             /* Switch to Unvalidated phase */
-            m_crState = CarefulResumeState::CR_UNVAL;
+            tcb->m_crState = TcpSocketState::CR_UNVAL;
 
             /* Calculate new seqno boundary for cwnd validation */
             limit_bytes += tcb->m_segmentSize * m_lastWindow;
@@ -408,12 +407,12 @@ TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Tim
         return;
     }
 
-    if (m_crState == CarefulResumeState::CR_UNVAL) 
+    if (tcb->m_crState == TcpSocketState::CR_UNVAL) 
     {
         /* Actions to perform in Unvalidated phase */
         if (tcb->m_lastAckedSeq >= m_limit) {
            /* Previous cwnd is now validated, resume normally */
-            m_crState = CarefulResumeState::CR_NORMAL;
+            tcb->m_crState = TcpSocketState::CR_NORMAL;
             if (m_ssthreshReset>0)
                 tcb->m_ssThresh = m_ssthreshReset*tcb->m_cWnd; 
         }
@@ -546,12 +545,6 @@ TcpCubicCr::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
 {
     NS_LOG_FUNCTION(this << tcb << bytesInFlight);
 
-	if (m_crState == CarefulResumeState::CR_RECOVERY) 
-	{
-		m_crState = CarefulResumeState::CR_NORMAL;
-		return 40 * tcb->m_segmentSize;
-	}
-	
 
     uint32_t segCwnd = tcb->GetCwndInSegments();
     NS_LOG_DEBUG("Loss at cWnd=" << segCwnd
@@ -581,13 +574,6 @@ void
 TcpCubicCr::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCongState_t newState)
 {
     NS_LOG_FUNCTION(this << tcb << newState);
-
-    if (m_crState == CarefulResumeState::CR_UNVAL &&
-		(newState == TcpSocketState::CA_RECOVERY || 
-        newState == TcpSocketState::CA_LOSS))
-    {
-        m_crState = CarefulResumeState::CR_RECOVERY;
-    }
 
     if (newState == TcpSocketState::CA_LOSS)
     {
@@ -629,7 +615,12 @@ TcpCrRecovery::GetTypeId()
     static TypeId tid = TypeId("ns3::TcpCrRecovery")
                             .SetParent<TcpClassicRecovery>()
                             .SetGroupName("Internet")
-                            .AddConstructor<TcpCrRecovery>();
+                            .AddConstructor<TcpCrRecovery>()
+            			.AddAttribute("EnablePipe",
+                        	"Enable (true) or disable (false) CSS in Hystart",
+                          	BooleanValue(false),
+                            MakeBooleanAccessor(&TcpCrRecovery::m_enablePipe),
+                            MakeBooleanChecker());
     return tid;
 }
 
@@ -646,7 +637,6 @@ TcpCrRecovery::TcpCrRecovery(const TcpCrRecovery& sock)
 	m_probeEnd(Time::Min())
 {
     NS_LOG_FUNCTION(this);
-	m_cr_done = false;
 }
 
 TcpCrRecovery::~TcpCrRecovery()
@@ -663,20 +653,18 @@ TcpCrRecovery::EnterRecovery(Ptr<TcpSocketState> tcb,
 {
     NS_LOG_FUNCTION(this << tcb << dupAckCount << unAckDataCount);
 
-	m_enterRecoveryTime = Simulator::Now();
-	m_rttLastAck = tcb->m_minRtt;
-	m_probeEnd = m_enterRecoveryTime + 5*m_rttLastAck/4;
-
-    //tcb->m_cWnd = tcb->m_ssThresh;
-	tcb->m_cWnd = tcb->m_segmentSize;	
-
+	if (tcb->m_crState == TcpSocketState::CR_UNVAL) {
+		m_enterRecoveryTime = Simulator::Now();
+		m_rttLastAck = tcb->m_minRtt;
+		m_probeEnd = m_enterRecoveryTime + 5*m_rttLastAck/4;
+		if (m_enablePipe)
+			tcb->m_cWnd = tcb->m_segmentSize;	
+		else
+			tcb->m_cWnd = tcb->m_initialCWnd * tcb->m_segmentSize;
+	} else
+    	tcb->m_cWnd = tcb->m_ssThresh;
 
     tcb->m_cWndInfl = tcb->m_ssThresh + (dupAckCount * tcb->m_segmentSize);
-
-	if (m_cr_done == true)
-		printf("JK-TRUE ");
-	else
-		printf("JK-FALSE ");
 
 }
 
@@ -686,12 +674,12 @@ TcpCrRecovery::DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes [[may
     NS_LOG_FUNCTION(this << tcb << deliveredBytes);
 	Time now = Simulator::Now();
 
-
-	if (now < m_probeEnd)
+	if (now < m_probeEnd && 
+		tcb->m_crState == TcpSocketState::CR_UNVAL &&
+		m_enablePipe)
 		tcb->m_cWnd += tcb->m_segmentSize/2;
 
     tcb->m_cWndInfl += tcb->m_segmentSize;
-
 
 }
 
@@ -706,11 +694,11 @@ TcpCrRecovery::ExitRecovery(Ptr<TcpSocketState> tcb)
     // reset the inflated cWnd trace variable
     tcb->m_cWndInfl = tcb->m_ssThresh.Get();
 
-	std::cout << "         >>      " << Simulator::Now().GetSeconds();
-	std::cout << "AR:" << tcb->GetSsThreshInSegments();
-	std::cout << "ARC:" << tcb->GetCwndInSegments();
-	tcb->m_ssThresh = 2 * tcb->m_cWnd;
-	std::cout << "ER:" << tcb->GetSsThreshInSegments();
+	if (tcb->m_crState == TcpSocketState::CR_UNVAL && 
+		m_enablePipe)
+		tcb->m_ssThresh = 2 * tcb->m_cWnd;
+
+	tcb->m_crState = TcpSocketState::CR_NORMAL;
 }
 
 std::string
