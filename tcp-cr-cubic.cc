@@ -413,8 +413,9 @@ TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Tim
         if (tcb->m_lastAckedSeq >= m_limit) {
            /* Previous cwnd is now validated, resume normally */
             tcb->m_crState = TcpSocketState::CR_NORMAL;
-            if (m_ssthreshReset>0)
-                tcb->m_ssThresh = m_ssthreshReset*tcb->m_cWnd; 
+            if (m_ssthreshReset>0) {
+                tcb->m_ssThresh = m_ssthreshReset*tcb->m_cWnd;
+			}
         }
     }
 
@@ -665,9 +666,9 @@ TcpCrRecovery::EnterRecovery(Ptr<TcpSocketState> tcb,
 		m_rttLastAck = tcb->m_minRtt;
 		m_probeEnd = m_enterRecoveryTime + 5*m_rttLastAck/4;
 		if (m_enablePipe)
-			tcb->m_cWnd = tcb->m_segmentSize;	
+			tcb->m_cWnd = 2*tcb->m_segmentSize;
 		else
-			tcb->m_cWnd = tcb->m_initialCWnd * tcb->m_segmentSize;
+			tcb->m_cWnd = 2*tcb->m_initialCWnd * tcb->m_segmentSize;
 	} else
     	tcb->m_cWnd = tcb->m_ssThresh;
 
@@ -706,7 +707,6 @@ TcpCrRecovery::ExitRecovery(Ptr<TcpSocketState> tcb)
 	if (tcb->m_crState == TcpSocketState::CR_RECOVERY && 
 		m_enablePipe) {
 		tcb->m_ssThresh = tcb->m_cWnd;
-		std::cout << " AA" << Simulator::Now().GetSeconds() << "AA ";
 	}
 
 	tcb->m_crState = TcpSocketState::CR_NORMAL;
