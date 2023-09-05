@@ -575,8 +575,15 @@ TcpCubicCr::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::Tc
 {
     NS_LOG_FUNCTION(this << tcb << newState);
 
+
+	if (tcb->m_crState == TcpSocketState::CR_UNVAL &&
+		newState == TcpSocketState::CA_RECOVERY)
+		tcb->m_crState = TcpSocketState::CR_RECOVERY;
+
+
     if (newState == TcpSocketState::CA_LOSS)
     {
+		tcb->m_crState = TcpSocketState::CR_NORMAL;
         CubicReset(tcb);
         HystartReset(tcb);
     }
@@ -618,7 +625,7 @@ TcpCrRecovery::GetTypeId()
                             .AddConstructor<TcpCrRecovery>()
             			.AddAttribute("EnablePipe",
                         	"Enable (true) or disable (false) CSS in Hystart",
-                          	BooleanValue(false),
+                          	BooleanValue(true),
                             MakeBooleanAccessor(&TcpCrRecovery::m_enablePipe),
                             MakeBooleanChecker());
     return tid;
@@ -653,7 +660,7 @@ TcpCrRecovery::EnterRecovery(Ptr<TcpSocketState> tcb,
 {
     NS_LOG_FUNCTION(this << tcb << dupAckCount << unAckDataCount);
 
-	if (tcb->m_crState == TcpSocketState::CR_UNVAL) {
+	if (tcb->m_crState == TcpSocketState::CR_RECOVERY) {
 		m_enterRecoveryTime = Simulator::Now();
 		m_rttLastAck = tcb->m_minRtt;
 		m_probeEnd = m_enterRecoveryTime + 5*m_rttLastAck/4;
@@ -675,9 +682,11 @@ TcpCrRecovery::DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes [[may
 	Time now = Simulator::Now();
 
 	if (now < m_probeEnd && 
-		tcb->m_crState == TcpSocketState::CR_UNVAL &&
-		m_enablePipe)
+		tcb->m_crState == TcpSocketState::CR_RECOVERY &&
+		m_enablePipe) {
 		tcb->m_cWnd += tcb->m_segmentSize/2;
+		tcb->m_ssThresh = tcb->m_cWnd;
+	}
 
     tcb->m_cWndInfl += tcb->m_segmentSize;
 
@@ -694,9 +703,11 @@ TcpCrRecovery::ExitRecovery(Ptr<TcpSocketState> tcb)
     // reset the inflated cWnd trace variable
     tcb->m_cWndInfl = tcb->m_ssThresh.Get();
 
-	if (tcb->m_crState == TcpSocketState::CR_UNVAL && 
-		m_enablePipe)
-		tcb->m_ssThresh = 2 * tcb->m_cWnd;
+	if (tcb->m_crState == TcpSocketState::CR_RECOVERY && 
+		m_enablePipe) {
+		tcb->m_ssThresh = tcb->m_cWnd;
+		std::cout << " AA" << Simulator::Now().GetSeconds() << "AA ";
+	}
 
 	tcb->m_crState = TcpSocketState::CR_NORMAL;
 }
