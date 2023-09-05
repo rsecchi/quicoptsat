@@ -125,6 +125,7 @@ int main(int argc, char* argv[])
 	bool boolp = false;
 	bool boolp_iw = false;
     bool boolpg = false;
+	bool enablepipe = true;
 
 	std::string transport_prot = "TcpCubic";
 	std::string bandwidth = "5Mbps";
@@ -141,6 +142,7 @@ int main(int argc, char* argv[])
 	std::string ss_pacing_ratio = "200";
     std::string max_pacing_rate = "1Gbps";
 	std::string recovery = "ns3::TcpClassicRecovery";
+	std::string enablepip = "1";
 
 	CommandLine cmd(__FILE__);
 	cmd.AddValue("num_flows", "Number of flows", num_flows);
@@ -165,7 +167,8 @@ int main(int argc, char* argv[])
 	cmd.AddValue("last_cwnd", "Careful Resume stored cwnd", last_cwnd);
     cmd.AddValue("ssthresh_reset", "Multiplier for ssthresh", ssthresh_reset);
     cmd.AddValue("prog_growth", "Progressive growth in Reiconassance", prog_growth);
-	cmd.AddValue("recovery", "Define the Safe Retreat Recovery algorithm", recovery);
+	cmd.AddValue("recovery", "Recovery algorithm", recovery);
+	cmd.AddValue("pipe", "Enables pipesize estimation", enablepip);
 	cmd.Parse(argc, argv);
 
 	if (pacing == "1")
@@ -186,13 +189,17 @@ int main(int argc, char* argv[])
 	if (hs == "0")
 		Config::SetDefault("ns3::TcpCubic::HyStart", BooleanValue(false));
 
+	if (enablepip == "0")
+		enablepipe = false;
+
 	/* config */
 	/* pacing */
 	Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(boolp));
 	Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(boolp_iw));
 	Config::SetDefault("ns3::TcpSocketState::PacingSsRatio", UintegerValue(stoi(ss_pacing_ratio)));
 	Config::SetDefault("ns3::TcpSocketState::MaxPacingRate", StringValue(max_pacing_rate));
-	
+	Config::SetDefault("ns3::TcpCrRecovery::EnablePipe", BooleanValue(enablepipe));
+
 	// Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(iw));
 	Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(327680000));
 	Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(327688000));
