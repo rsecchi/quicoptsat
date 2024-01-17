@@ -20,6 +20,7 @@
 #include <string>
 #include <type_traits>
 
+//#define TRACES_ON
 
 using namespace ns3;
 
@@ -93,10 +94,12 @@ void SocketTraces(uint32_t i, Ptr<BulkSendApplication> bulk) {
 	std::string name = 
 		"/NodeList/0/$ns3::TcpL4Protocol/SocketList/" +	std::to_string(i);
 
+#ifdef TRACES_ON
 	Config::Connect(name + "/CongestionWindow", MakeCallback(&CwndTracer));
 	Config::Connect(name + "/RTT", MakeCallback(&RttTracer));
 	Config::Connect(name + "/SlowStartThreshold", MakeCallback(&RWNDTracer));
 	Config::Connect(name + "/BytesInFlight", MakeCallback(&FlightSizeTracer));
+#endif
 
 	/* access to the socket */
 	Ptr<Socket> socket = bulk->GetSocket();
@@ -253,8 +256,9 @@ int main(int argc, char* argv[])
 	Ipv4AddressHelper address;
 	address.SetBase("10.1.1.0", "255.255.255.0");
 	Ipv4InterfaceContainer ifv4 = address.Assign(devs);
+#ifdef TRACES_ON
 	pp.EnablePcapAll("tcpsat");
-
+#endif
 
 	//list_aggregates(nodes.Get(0));
 	bttln_queue.open("bottln_queue.tr", std::ios::out);
@@ -300,12 +304,16 @@ int main(int argc, char* argv[])
 	}
 
 	/* start simulation */
-	//FlowMonitorHelper fmon;
-	//fmon.InstallAll();
+#ifdef TRACES_ON
+	FlowMonitorHelper fmon;
+	fmon.InstallAll();
+	fmon.GetMonitor()->Start(Seconds(20.0));
+#endif
 	Simulator::Stop(Seconds(duration));
 	Simulator::Run();
-
-	// fmon.SerializeToXmlFile("tcpsat.flowmonitor", true, true);
+#ifdef TRACES_ON
+	fmon.SerializeToXmlFile("tcpsat.flowmonitor", true, true);
+#endif
 	Simulator::Destroy();
 
 	return 0;
