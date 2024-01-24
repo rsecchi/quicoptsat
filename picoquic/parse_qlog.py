@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import json
-
+import sys
 
 def parse_json_file(file_path: str):
     """
@@ -39,19 +39,19 @@ def extract_field_from_events(event_type: str, field_name: str, qlog_events: dic
     ret = list()
     if qlog_events:
         for event in qlog_events:
-            if event[1] is event_type and field_name in event[3]:
-                t = tuple((event[1], event[3].get(field_name)))
+            if event[1] == event_type and field_name in event[3].keys():
+                t = (event[0], event[3].get(field_name))
                 ret.append(t)
 
     return ret
 
 
 if __name__ == '__main__':
-    file_path = 'a6507652b956a680.server.qlog'
+    file_path = sys.argv[1]
     json_data = parse_json_file(file_path)
 
     if json_data:
         events = json_data["traces"][0]["events"]
         trace = extract_field_from_events("recovery", "bytes_in_flight", events)
         for entry in trace:
-            print(entry)
+            print("{}, {}".format(entry[0], entry[1]))
