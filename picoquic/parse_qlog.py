@@ -23,6 +23,24 @@ def parse_json_file(file_path: str):
         print(f"Error decoding JSON in '{file_path}': {e}")
 
 
+def write_to_file(data: list[tuple], field_name: str) -> None:
+    """
+    inputs:
+        data: a list of tuples as given by extract_flied_from_events
+        name: name of the file
+
+    outputs:
+        None
+
+    This function will create a csv file data given
+    """
+    name = field_name + ".csv"
+    with open(name, "w") as f:
+        f.write(f"time, {field_name}\n")
+        for d in data:
+            f.write(f"{d[0]}, {d[1]}\n")
+
+
 def extract_field_from_events(event_type: str, field_name: str, qlog_events: dict) -> list[tuple]:
     """
     inputs:
@@ -43,7 +61,10 @@ def extract_field_from_events(event_type: str, field_name: str, qlog_events: dic
                 t = (event[0], event[3].get(field_name))
                 ret.append(t)
 
+    if ret:
+        write_to_file(ret, field_name)
     return ret
+
 
 
 if __name__ == '__main__':
@@ -52,6 +73,5 @@ if __name__ == '__main__':
 
     if json_data:
         events = json_data["traces"][0]["events"]
-        trace = extract_field_from_events("recovery", "bytes_in_flight", events)
-        for entry in trace:
-            print("{}, {}".format(entry[0], entry[1]))
+        flying_bytes = extract_field_from_events("recovery", "bytes_in_flight", events)
+        cwnd = extract_field_from_events("recovery", "cwnd", events)
