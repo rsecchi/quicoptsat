@@ -25,7 +25,7 @@ echo "== config start =="
 echo "== create parent qdisc =="
 sudo tc qdisc add dev lo root handle 1: prio bands 4
 echo "== create child qdisc with netem =="
-sudo tc qdisc add dev lo parent 1:4 handle 40: netem delay 250ms rate 1mbit
+sudo tc qdisc add dev lo parent 1:4 handle 40: netem delay 250ms rate 1mbit loss 5%
 
 echo "== create filter for redirecting =="
 sudo tc filter add dev lo parent 1: prio 4 protocol ip u32 match ip src 127.0.0.1 flowid 1:4
