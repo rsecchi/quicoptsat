@@ -1,0 +1,1103 @@
+From 778bc4ab9f6587c57ef3cb74be4b254d88532f0f Mon Sep 17 00:00:00 2001
+From: rsecchi <r.secchi@gmail.com>
+Date: Wed, 6 Sep 2023 14:37:03 +0100
+Subject: [PATCH 1/2] Careful Resume patch
+
+---
+ ns-3.39/src/internet/CMakeLists.txt           |   2 +
+ ns-3.39/src/internet/model/tcp-cr-cubic.cc    | 727 ++++++++++++++++++
+ ns-3.39/src/internet/model/tcp-cr-cubic.h     | 257 +++++++
+ ns-3.39/src/internet/model/tcp-socket-state.h |  12 +
+ 4 files changed, 998 insertions(+)
+ create mode 100644 ns-3.39/src/internet/model/tcp-cr-cubic.cc
+ create mode 100644 ns-3.39/src/internet/model/tcp-cr-cubic.h
+
+diff --git a/ns-3.39/src/internet/CMakeLists.txt b/ns-3.39/src/internet/CMakeLists.txt
+index 8d0508e..fc3404b 100644
+--- a/ns-3.39/src/internet/CMakeLists.txt
++++ b/ns-3.39/src/internet/CMakeLists.txt
+@@ -126,6 +126,7 @@ set(source_files
+     model/udp-socket-factory.cc
+     model/udp-socket-impl.cc
+     model/udp-socket.cc
++    model/tcp-cr-cubic.cc
+ )
+ 
+ set(header_files
+@@ -250,6 +251,7 @@ set(header_files
+     model/udp-socket-factory.h
+     model/udp-socket.h
+     model/windowed-filter.h
++    model/tcp-cr-cubic.h
+ )
+ 
+ set(private_header_files)
+diff --git a/ns-3.39/src/internet/model/tcp-cr-cubic.cc b/ns-3.39/src/internet/model/tcp-cr-cubic.cc
+new file mode 100644
+index 0000000..1805f57
+--- /dev/null
++++ b/ns-3.39/src/internet/model/tcp-cr-cubic.cc
+@@ -0,0 +1,727 @@
++/*
++ * Copyright (c) 2014 Natale Patriciello <natale.patriciello@gmail.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ *
++ */
++
++#define NS_LOG_APPEND_CONTEXT                                                                      \
++    {                                                                                              \
++        std::clog << Simulator::Now().GetSeconds() << " ";                                         \
++    }
++
++#include "tcp-cr-cubic.h"
++
++#include "ns3/log.h"
++
++NS_LOG_COMPONENT_DEFINE("TcpCubicCr");
++
++namespace ns3
++{
++
++NS_OBJECT_ENSURE_REGISTERED(TcpCubicCr);
++
++TypeId
++TcpCubicCr::GetTypeId()
++{
++    static TypeId tid =
++        TypeId("ns3::TcpCubicCr")
++            .SetParent<TcpSocketBase>()
++            .AddConstructor<TcpCubicCr>()
++            .SetGroupName("Internet")
++            .AddAttribute("FastConvergence",
++                          "Enable (true) or disable (false) fast convergence",
++                          BooleanValue(true),
++                          MakeBooleanAccessor(&TcpCubicCr::m_fastConvergence),
++                          MakeBooleanChecker())
++            .AddAttribute("Beta",
++                          "Beta for multiplicative decrease",
++                          DoubleValue(0.7),
++                          MakeDoubleAccessor(&TcpCubicCr::m_beta),
++                          MakeDoubleChecker<double>(0.0))
++            .AddAttribute("HyStart",
++                          "Enable (true) or disable (false) hybrid slow start algorithm",
++                          BooleanValue(true),
++                          MakeBooleanAccessor(&TcpCubicCr::m_hystart),
++                          MakeBooleanChecker())
++            .AddAttribute("HyStartpp",
++                          "Enable (true) or disable (false) CSS in Hystart",
++                          BooleanValue(false),
++                          MakeBooleanAccessor(&TcpCubicCr::m_hystartpp),
++                          MakeBooleanChecker())
++            .AddAttribute("css_growth_divisor",
++                          "Exponential growth factor CSS in Hystart",
++                          UintegerValue(8),
++                          MakeUintegerAccessor(&TcpCubicCr::m_css_growth_divisor),
++                          MakeUintegerChecker<uint8_t>())
++            .AddAttribute("css_max_rounds",
++                          "Maximum number of probing rounds in CSS",
++                          UintegerValue(5),
++                          MakeUintegerAccessor(&TcpCubicCr::m_css_max_rounds),
++                          MakeUintegerChecker<uint8_t>())
++            .AddAttribute("HyStartLowWindow",
++                          "Lower bound cWnd for hybrid slow start (segments)",
++                          UintegerValue(16),
++                          MakeUintegerAccessor(&TcpCubicCr::m_hystartLowWindow),
++                          MakeUintegerChecker<uint32_t>())
++			.AddAttribute("LastWindow",
++						  "Last cwnd at start of unvalidated period",
++						  UintegerValue(16),
++						  MakeUintegerAccessor(&TcpCubicCr::m_lastWindow),
++						  MakeUintegerChecker<uint32_t>())
++            .AddAttribute("LastRtt",
++                          "Spacing between ack's indicating train",
++                          TimeValue(MilliSeconds(2)),
++                          MakeTimeAccessor(&TcpCubicCr::m_lastRtt),
++                          MakeTimeChecker())
++            .AddAttribute("ssthreshReset",
++                          "Multiplier for ssthresh after Unvalidated",
++                          DoubleValue(0.0),
++                          MakeDoubleAccessor(&TcpCubicCr::m_ssthreshReset),
++                          MakeDoubleChecker<double>(0.0))
++            .AddAttribute("ProgressiveGrowth",
++                          "Enable (true) or disable (false) Progressive Growth",
++                          BooleanValue(false),
++                          MakeBooleanAccessor(&TcpCubicCr::m_progGrowth),
++                          MakeBooleanChecker())
++            .AddAttribute("HyStartDetect",
++                          "Hybrid Slow Start detection mechanisms:"
++                          "1: packet train, 2: delay, 3: both",
++                          IntegerValue(3),
++                          MakeIntegerAccessor(&TcpCubicCr::m_hystartDetect),
++                          MakeIntegerChecker<int>(1, 3))
++            .AddAttribute("HyStartMinSamples",
++                          "Number of delay samples for detecting the increase of delay",
++                          UintegerValue(8),
++                          MakeUintegerAccessor(&TcpCubicCr::m_hystartMinSamples),
++                          MakeUintegerChecker<uint8_t>())
++            .AddAttribute("HyStartAckDelta",
++                          "Spacing between ack's indicating train",
++                          TimeValue(MilliSeconds(2)),
++                          MakeTimeAccessor(&TcpCubicCr::m_hystartAckDelta),
++                          MakeTimeChecker())
++            .AddAttribute("HyStartDelayMin",
++                          "Minimum time for hystart algorithm",
++                          TimeValue(MilliSeconds(4)),
++                          MakeTimeAccessor(&TcpCubicCr::m_hystartDelayMin),
++                          MakeTimeChecker())
++            .AddAttribute("HyStartDelayMax",
++                          "Maximum time for hystart algorithm",
++                          TimeValue(MilliSeconds(1000)),
++                          MakeTimeAccessor(&TcpCubicCr::m_hystartDelayMax),
++                          MakeTimeChecker())
++            .AddAttribute("CubicDelta",
++                          "Delta Time to wait after fast recovery before adjusting param",
++                          TimeValue(MilliSeconds(10)),
++                          MakeTimeAccessor(&TcpCubicCr::m_cubicDelta),
++                          MakeTimeChecker())
++            .AddAttribute("CntClamp",
++                          "Counter value when no losses are detected (counter is used"
++                          " when incrementing cWnd in congestion avoidance, to avoid"
++                          " floating point arithmetic). It is the modulo of the (avoided)"
++                          " division",
++                          UintegerValue(20),
++                          MakeUintegerAccessor(&TcpCubicCr::m_cntClamp),
++                          MakeUintegerChecker<uint8_t>())
++            .AddAttribute("C",
++                          "Cubic Scaling factor",
++                          DoubleValue(0.4),
++                          MakeDoubleAccessor(&TcpCubicCr::m_c),
++                          MakeDoubleChecker<double>(0.0));
++    return tid;
++}
++
++TcpCubicCr::TcpCubicCr()
++    : TcpCongestionOps(),
++      m_cWndCnt(0),
++      m_lastMaxCwnd(0),
++      m_bicOriginPoint(0),
++      m_bicK(0.0),
++      m_delayMin(Time::Min()),
++      m_epochStart(Time::Min()),
++      m_found(0),
++      m_lastWindow(10),
++      m_lastRtt(Time::Min()),
++      m_ssthreshReset(0),
++      m_progGrowth(false),
++      m_roundStart(Time::Min()),
++      m_endSeq(0),
++      m_lastAck(Time::Min()),
++      m_cubicDelta(Time::Min()),
++      m_currRtt(Time::Min()),
++      m_sampleCnt(0),
++      m_limit(SequenceNumber32(0)),
++      m_hystartRounds(0),
++      m_divisor(1),
++      m_baselineRtt(Time::Min())
++{
++    NS_LOG_FUNCTION(this);
++}
++
++TcpCubicCr::TcpCubicCr(const TcpCubicCr& sock)
++    : TcpCongestionOps(sock),
++      m_fastConvergence(sock.m_fastConvergence),
++      m_beta(sock.m_beta),
++      m_hystart(sock.m_hystart),
++      m_hystartDetect(sock.m_hystartDetect),
++      m_hystartLowWindow(sock.m_hystartLowWindow),
++      m_hystartAckDelta(sock.m_hystartAckDelta),
++      m_hystartDelayMin(sock.m_hystartDelayMin),
++      m_hystartDelayMax(sock.m_hystartDelayMax),
++      m_hystartMinSamples(sock.m_hystartMinSamples),
++      m_initialCwnd(sock.m_initialCwnd),
++      m_cntClamp(sock.m_cntClamp),
++      m_c(sock.m_c),
++      m_cWndCnt(sock.m_cWndCnt),
++      m_lastMaxCwnd(sock.m_lastMaxCwnd),
++      m_bicOriginPoint(sock.m_bicOriginPoint),
++      m_bicK(sock.m_bicK),
++      m_delayMin(sock.m_delayMin),
++      m_epochStart(sock.m_epochStart),
++      m_found(sock.m_found),
++      m_lastWindow(sock.m_lastWindow),
++      m_lastRtt(sock.m_lastRtt),
++      m_crState(sock.m_crState),
++      m_ssthreshReset(sock.m_ssthreshReset),
++      m_progGrowth(sock.m_progGrowth),
++      m_roundStart(sock.m_roundStart),
++      m_endSeq(sock.m_endSeq),
++      m_lastAck(sock.m_lastAck),
++      m_cubicDelta(sock.m_cubicDelta),
++      m_currRtt(sock.m_currRtt),
++      m_sampleCnt(sock.m_sampleCnt),
++      m_limit(sock.m_limit),
++      m_hystartRounds(sock.m_hystartRounds),
++      m_divisor(sock.m_divisor),
++      m_baselineRtt(sock.m_baselineRtt)
++{
++    NS_LOG_FUNCTION(this);
++}
++
++std::string
++TcpCubicCr::GetName() const
++{
++    return "TcpCubicCr";
++}
++
++void
++TcpCubicCr::HystartReset(Ptr<const TcpSocketState> tcb)
++{
++    NS_LOG_FUNCTION(this);
++
++    m_roundStart = m_lastAck = Simulator::Now();
++    m_endSeq = tcb->m_highTxMark;
++    m_currRtt = Time::Min();
++    m_sampleCnt = 0;
++    // m_limit = SequenceNumber32(0);
++	// std::cout<<"crap";
++}
++
++void
++TcpCubicCr::IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
++{
++    NS_LOG_FUNCTION(this << tcb << segmentsAcked);
++
++    if (tcb->m_cWnd < tcb->m_ssThresh)
++    {
++        if (m_hystart && tcb->m_lastAckedSeq > m_endSeq)
++        {
++            HystartReset(tcb);
++            m_hystartRounds++;
++        }
++
++        // In Linux, the QUICKACK socket option enables the receiver to send
++        // immediate acks initially (during slow start) and then transition
++        // to delayed acks.  ns-3 does not implement QUICKACK, and if ack
++        // counting instead of byte counting is used during slow start window
++        // growth, when TcpSocket::DelAckCount==2, then the slow start will
++        // not reach as large of an initial window as in Linux.  Therefore,
++        // we can approximate the effect of QUICKACK by making this slow
++        // start phase perform Appropriate Byte Counting (RFC 3465)
++        tcb->m_cWnd += segmentsAcked * tcb->m_segmentSize / m_divisor;
++        segmentsAcked = 0;
++
++        NS_LOG_INFO("In SlowStart, updated to cwnd " << tcb->m_cWnd << " ssthresh "
++                                                     << tcb->m_ssThresh);
++    }
++
++    if (tcb->m_cWnd >= tcb->m_ssThresh && segmentsAcked > 0)
++    {
++        m_cWndCnt += segmentsAcked;
++        uint32_t cnt = Update(tcb);
++
++        /* According to RFC 6356 even once the new cwnd is
++         * calculated you must compare this to the number of ACKs received since
++         * the last cwnd update. If not enough ACKs have been received then cwnd
++         * cannot be updated.
++         */
++        if (m_cWndCnt >= cnt)
++        {
++            tcb->m_cWnd += tcb->m_segmentSize;
++            m_cWndCnt -= cnt;
++            NS_LOG_INFO("In CongAvoid, updated to cwnd " << tcb->m_cWnd);
++        }
++        else
++        {
++            NS_LOG_INFO("Not enough segments have been ACKed to increment cwnd."
++                        "Until now "
++                        << m_cWndCnt << " cnd " << cnt);
++        }
++    }
++}
++
++uint32_t
++TcpCubicCr::Update(Ptr<TcpSocketState> tcb)
++{
++    NS_LOG_FUNCTION(this);
++    Time t;
++    uint32_t delta;
++    uint32_t bicTarget;
++    uint32_t cnt = 0;
++    double offs;
++    uint32_t segCwnd = tcb->GetCwndInSegments();
++
++    if (m_epochStart == Time::Min())
++    {
++        m_epochStart = Simulator::Now(); // record the beginning of an epoch
++
++        if (m_lastMaxCwnd <= segCwnd)
++        {
++            NS_LOG_DEBUG("lastMaxCwnd <= m_cWnd. K=0 and origin=" << segCwnd);
++            m_bicK = 0.0;
++            m_bicOriginPoint = segCwnd;
++        }
++        else
++        {
++            m_bicK = std::pow((m_lastMaxCwnd - segCwnd) / m_c, 1 / 3.);
++            m_bicOriginPoint = m_lastMaxCwnd;
++            NS_LOG_DEBUG("lastMaxCwnd > m_cWnd. K=" << m_bicK << " and origin=" << m_lastMaxCwnd);
++        }
++    }
++
++    t = Simulator::Now() + m_delayMin - m_epochStart;
++
++    if (t.GetSeconds() < m_bicK) /* t - K */
++    {
++        offs = m_bicK - t.GetSeconds();
++        NS_LOG_DEBUG("t=" << t.GetSeconds() << " <k: offs=" << offs);
++    }
++    else
++    {
++        offs = t.GetSeconds() - m_bicK;
++        NS_LOG_DEBUG("t=" << t.GetSeconds() << " >= k: offs=" << offs);
++    }
++
++    /* Constant value taken from Experimental Evaluation of Cubic Tcp, available at
++     * eprints.nuim.ie/1716/1/Hamiltonpfldnet2007_cubic_final.pdf */
++    delta = m_c * std::pow(offs, 3);
++
++    NS_LOG_DEBUG("delta: " << delta);
++
++    if (t.GetSeconds() < m_bicK)
++    {
++        // below origin
++        bicTarget = m_bicOriginPoint - delta;
++        NS_LOG_DEBUG("t < k: Bic Target: " << bicTarget);
++    }
++    else
++    {
++        // above origin
++        bicTarget = m_bicOriginPoint + delta;
++        NS_LOG_DEBUG("t >= k: Bic Target: " << bicTarget);
++    }
++
++    // Next the window target is converted into a cnt or count value. CUBIC will
++    // wait until enough new ACKs have arrived that a counter meets or exceeds
++    // this cnt value. This is how the CUBIC implementation simulates growing
++    // cwnd by values other than 1 segment size.
++    if (bicTarget > segCwnd)
++    {
++        cnt = segCwnd / (bicTarget - segCwnd);
++        NS_LOG_DEBUG("target>cwnd. cnt=" << cnt);
++    }
++    else
++    {
++        cnt = 100 * segCwnd;
++    }
++
++    if (m_lastMaxCwnd == 0 && cnt > m_cntClamp)
++    {
++        cnt = m_cntClamp;
++    }
++
++    // The maximum rate of cwnd increase CUBIC allows is 1 packet per
++    // 2 packets ACKed, meaning cwnd grows at 1.5x per RTT.
++    return std::max(cnt, 2U);
++}
++
++void
++TcpCubicCr::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt)
++{
++    uint32_t limit_bytes, target_bytes;
++
++    NS_LOG_FUNCTION(this << tcb << segmentsAcked << rtt);
++
++    /* Careful Resume */
++    if (tcb->m_crState == TcpSocketState::CR_RECON)
++    {
++        /* Actions to perform in Recoinassance phase */
++        if (rtt <= m_lastRtt/10 || rtt >= m_lastRtt*10)
++        {
++            /* Drop plans to jump because past RTT is too different */
++            tcb->m_crState = TcpSocketState::CR_NORMAL;
++        }
++        limit_bytes = tcb->m_segmentSize * (tcb->m_initialCWnd-1);
++        m_limit = SequenceNumber32(limit_bytes);
++
++        if (m_progGrowth) {
++            target_bytes = tcb->m_segmentSize * segmentsAcked *
++                            (m_lastWindow - tcb->m_initialCWnd);
++//			printf("increase=%u iw=%u segmentsAcked=%u\n", target_bytes/tcb->m_initialCWnd, tcb->m_initialCWnd, segmentsAcked);
++
++            tcb->m_cWnd += target_bytes / tcb->m_initialCWnd; 
++        }
++
++        if (tcb->m_lastAckedSeq >= m_limit) {
++            /* Switch to Unvalidated phase */
++            tcb->m_crState = TcpSocketState::CR_UNVAL;
++
++            /* Calculate new seqno boundary for cwnd validation */
++            limit_bytes += tcb->m_segmentSize * m_lastWindow;
++            m_limit = SequenceNumber32(limit_bytes);
++
++            tcb->m_cWnd = limit_bytes;
++        }
++        return;
++    }
++
++    if (tcb->m_crState == TcpSocketState::CR_UNVAL) 
++    {
++        /* Actions to perform in Unvalidated phase */
++        if (tcb->m_lastAckedSeq >= m_limit) {
++           /* Previous cwnd is now validated, resume normally */
++            tcb->m_crState = TcpSocketState::CR_NORMAL;
++            if (m_ssthreshReset>0) {
++                tcb->m_ssThresh = m_ssthreshReset*tcb->m_cWnd;
++			}
++        }
++    }
++
++    /* Careful Resume proceeds with normal congestion control */
++
++
++    /* Discard delay samples right after fast recovery */
++    if (m_epochStart != Time::Min() && (Simulator::Now() - m_epochStart) < m_cubicDelta)
++    {
++        return;
++    }
++
++    /* first time call or link delay decreases */
++    if (m_delayMin == Time::Min() || m_delayMin > rtt)
++    {
++        m_delayMin = rtt;
++    }
++
++    /* hystart triggers when cwnd is larger than some threshold */
++    if (m_hystart && tcb->m_cWnd <= tcb->m_ssThresh &&
++        tcb->m_cWnd >= m_hystartLowWindow * tcb->m_segmentSize)
++    {
++        HystartUpdate(tcb, rtt);
++    }
++}
++
++void
++TcpCubicCr::HystartUpdate(Ptr<TcpSocketState> tcb, const Time& delay)
++{
++    NS_LOG_FUNCTION(this << delay);
++
++    if (!(m_found & m_hystartDetect))
++    {
++        Time now = Simulator::Now();
++
++        /* first detection parameter - ack-train detection */
++        if ((now - m_lastAck) <= m_hystartAckDelta)
++        {
++            m_lastAck = now;
++
++            if ((now - m_roundStart) > m_delayMin)
++            {
++                m_found |= PACKET_TRAIN;
++            }
++        }
++
++        /* obtain the minimum delay of more than sampling packets */
++        if (m_sampleCnt < m_hystartMinSamples)
++        {
++            if (m_currRtt == Time::Min() || m_currRtt > delay)
++            {
++                m_currRtt = delay;
++            }
++
++            ++m_sampleCnt;
++        }
++        else
++        {
++            if (m_currRtt > m_delayMin + HystartDelayThresh(m_delayMin))
++            {
++                m_found |= DELAY;
++            }
++        }
++
++        /*
++         * Either one of two conditions are met,
++         * we exit from slow start immediately.
++         */
++        if ((m_found & m_hystartDetect) && !m_hystartpp)
++        {
++            NS_LOG_DEBUG("Exit from SS, immediately :-)");
++            tcb->m_ssThresh = tcb->m_cWnd;
++        }
++
++        /* if CSS is enabled, record baseline RTT and
++         * entry round, and change SS growth rate (probing)
++         */
++        if ((m_found & m_hystartDetect) && m_hystartpp)
++        {
++            m_baselineRtt = m_delayMin;
++            m_divisor = m_css_growth_divisor;
++            m_css_first_round = m_hystartRounds;
++        }
++    }
++
++    /* Conservative Slow Start (CSS) */
++    if ((m_found & m_hystartDetect) && m_hystartpp)
++    {
++        /* Enter CA after max rounds in CSS */
++        if (m_hystartRounds - m_css_first_round > m_css_max_rounds)
++        {
++            tcb->m_ssThresh = tcb->m_cWnd;
++            m_currRtt = Time::Min();
++            m_divisor = 1;
++        }
++        else
++		{
++            /*  Back to SS in delay drops below baseline */
++            if (m_delayMin < m_baselineRtt) {
++                m_divisor = 1;
++                m_found = 0;
++            }
++        }
++    }
++
++}
++
++Time
++TcpCubicCr::HystartDelayThresh(const Time& t) const
++{
++    NS_LOG_FUNCTION(this << t);
++
++    Time ret = t/8;
++    if (t > m_hystartDelayMax)
++    {
++        ret = m_hystartDelayMax;
++    }
++    else if (t < m_hystartDelayMin)
++    {
++        ret = m_hystartDelayMin;
++    }
++
++    return ret;
++}
++
++uint32_t
++TcpCubicCr::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
++{
++    NS_LOG_FUNCTION(this << tcb << bytesInFlight);
++
++
++    uint32_t segCwnd = tcb->GetCwndInSegments();
++    NS_LOG_DEBUG("Loss at cWnd=" << segCwnd
++                                 << " segments in flight=" << bytesInFlight / tcb->m_segmentSize);
++
++    /* Wmax and fast convergence */
++    if (segCwnd < m_lastMaxCwnd && m_fastConvergence)
++    {
++        m_lastMaxCwnd = (segCwnd * (1 + m_beta)) / 2; // Section 4.6 in RFC 8312
++    }
++    else
++    {
++        m_lastMaxCwnd = segCwnd;
++    }
++
++    m_epochStart = Time::Min(); // end of epoch
++
++    /* Formula taken from the Linux kernel */
++    uint32_t ssThresh = std::max(static_cast<uint32_t>(segCwnd * m_beta), 2U) * tcb->m_segmentSize;
++
++    NS_LOG_DEBUG("SsThresh = " << ssThresh);
++
++    return ssThresh;
++}
++
++void
++TcpCubicCr::CongestionStateSet(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCongState_t newState)
++{
++    NS_LOG_FUNCTION(this << tcb << newState);
++
++
++	if (tcb->m_crState == TcpSocketState::CR_UNVAL &&
++		newState == TcpSocketState::CA_RECOVERY)
++		tcb->m_crState = TcpSocketState::CR_RECOVERY;
++
++
++    if (newState == TcpSocketState::CA_LOSS)
++    {
++		tcb->m_crState = TcpSocketState::CR_NORMAL;
++        CubicReset(tcb);
++        HystartReset(tcb);
++    }
++	
++
++}
++
++void
++TcpCubicCr::CubicReset(Ptr<const TcpSocketState> tcb)
++{
++    NS_LOG_FUNCTION(this << tcb);
++
++    m_lastMaxCwnd = 0;
++    m_bicOriginPoint = 0;
++    m_bicK = 0;
++    m_delayMin = Time::Min();
++    m_found = false;
++}
++
++Ptr<TcpCongestionOps>
++TcpCubicCr::Fork()
++{
++    NS_LOG_FUNCTION(this);
++    return CopyObject<TcpCubicCr>(this);
++}
++
++
++// Careful Resume Recovery 
++
++
++NS_OBJECT_ENSURE_REGISTERED(TcpCrRecovery);
++
++TypeId
++TcpCrRecovery::GetTypeId()
++{
++    static TypeId tid = TypeId("ns3::TcpCrRecovery")
++                            .SetParent<TcpClassicRecovery>()
++                            .SetGroupName("Internet")
++                            .AddConstructor<TcpCrRecovery>()
++            			.AddAttribute("EnablePipe",
++                        	"Enable (true) or disable (false) CSS in Hystart",
++                          	BooleanValue(true),
++                            MakeBooleanAccessor(&TcpCrRecovery::m_enablePipe),
++                            MakeBooleanChecker());
++    return tid;
++}
++
++TcpCrRecovery::TcpCrRecovery()
++    : TcpClassicRecovery()
++{
++    NS_LOG_FUNCTION(this);
++}
++
++TcpCrRecovery::TcpCrRecovery(const TcpCrRecovery& sock)
++    : TcpClassicRecovery(sock),
++	m_enterRecoveryTime(Time::Min()),
++	m_rttLastAck(Time::Min()),
++	m_probeEnd(Time::Min())
++{
++    NS_LOG_FUNCTION(this);
++}
++
++TcpCrRecovery::~TcpCrRecovery()
++{
++    NS_LOG_FUNCTION(this);
++}
++
++
++void
++TcpCrRecovery::EnterRecovery(Ptr<TcpSocketState> tcb,
++                                  uint32_t dupAckCount,
++                                  uint32_t unAckDataCount [[maybe_unused]],
++                                  uint32_t deliveredBytes [[maybe_unused]])
++{
++    NS_LOG_FUNCTION(this << tcb << dupAckCount << unAckDataCount);
++
++	if (tcb->m_crState == TcpSocketState::CR_RECOVERY) {
++		m_enterRecoveryTime = Simulator::Now();
++		m_rttLastAck = tcb->m_minRtt;
++		m_probeEnd = m_enterRecoveryTime + 5*m_rttLastAck/4;
++		if (m_enablePipe)
++			tcb->m_cWnd = 2*tcb->m_segmentSize;
++		else
++			tcb->m_cWnd = tcb->m_initialCWnd * tcb->m_segmentSize;
++	} else
++    	tcb->m_cWnd = tcb->m_ssThresh;
++
++    tcb->m_cWndInfl = tcb->m_ssThresh + (dupAckCount * tcb->m_segmentSize);
++
++}
++
++void
++TcpCrRecovery::DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes [[maybe_unused]])
++{
++    NS_LOG_FUNCTION(this << tcb << deliveredBytes);
++	Time now = Simulator::Now();
++
++	if (now < m_probeEnd && 
++		tcb->m_crState == TcpSocketState::CR_RECOVERY &&
++		m_enablePipe) {
++		tcb->m_cWnd += tcb->m_segmentSize/2;
++		tcb->m_ssThresh = tcb->m_cWnd;
++	}
++
++    tcb->m_cWndInfl += tcb->m_segmentSize;
++
++}
++
++void
++TcpCrRecovery::ExitRecovery(Ptr<TcpSocketState> tcb)
++{
++    NS_LOG_FUNCTION(this << tcb);
++    // Follow NewReno procedures to exit FR if SACK is disabled
++    // (RFC2582 sec.3 bullet #5 paragraph 2, option 2)
++    // In this implementation, actual m_cWnd value is reset to ssThresh
++    // immediately before calling ExitRecovery(), so we just need to
++    // reset the inflated cWnd trace variable
++    tcb->m_cWndInfl = tcb->m_ssThresh.Get();
++
++	if (tcb->m_crState == TcpSocketState::CR_RECOVERY && 
++		m_enablePipe) {
++		tcb->m_ssThresh = tcb->m_cWnd;
++	}
++
++	tcb->m_crState = TcpSocketState::CR_NORMAL;
++}
++
++std::string
++TcpCrRecovery::GetName() const
++{
++    return "TcpCrRecovery";
++}
++
++Ptr<TcpRecoveryOps>
++TcpCrRecovery::Fork()
++{
++    return CopyObject<TcpCrRecovery>(this);
++}
++
++} // namespace ns3
+diff --git a/ns-3.39/src/internet/model/tcp-cr-cubic.h b/ns-3.39/src/internet/model/tcp-cr-cubic.h
+new file mode 100644
+index 0000000..dab4e8f
+--- /dev/null
++++ b/ns-3.39/src/internet/model/tcp-cr-cubic.h
+@@ -0,0 +1,257 @@
++/*
++ * Copyright (c) 2014 Natale Patriciello <natale.patriciello@gmail.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ */
++
++#ifndef TCPCUBIC_H
++#define TCPCUBIC_H
++
++#include "ns3/tcp-congestion-ops.h"
++#include "ns3/tcp-recovery-ops.h"
++#include "ns3/tcp-rate-ops.h"
++#include "ns3/tcp-socket-base.h"
++
++namespace ns3
++{
++
++
++class TcpSocketState;
++
++
++/**
++ * \brief The Cubic Congestion Control Algorithm
++ *
++ * TCP Cubic is a protocol that enhances the fairness property
++ * of Bic while retaining its scalability and stability. The main feature is
++ * that the window growth function is defined in real time in order to be independent
++ * from the RTT. More specifically, the congestion window of Cubic is determined
++ * by a function of the elapsed time from the last window reduction.
++ *
++ * The Cubic code is quite similar to that of Bic.
++ * The main difference is located in the method Update, an edit
++ * necessary for satisfying the Cubic window growth, that can be tuned with
++ * the attribute C (the Cubic scaling factor).
++ *
++ * Following the Linux implementation, we included the Hybrid Slow Start,
++ * that effectively prevents the overshooting of slow start
++ * while maintaining a full utilization of the network. This new type of slow
++ * start can be disabled through the HyStart attribute.
++ *
++ * CUBIC TCP is implemented and used by default in Linux kernels 2.6.19
++ * and above; this version follows the implementation in Linux 3.14, which
++ * slightly differ from the CUBIC paper. It also features HyStart.
++ *
++ * Home page:
++ *      https://web.archive.org/web/20080607093013/http://netsrv.csc.ncsu.edu/twiki/bin/view/Main/BIC
++ * The work starts from the implementation of CUBIC TCP in
++ * Sangtae Ha, Injong Rhee and Lisong Xu,
++ * "CUBIC: A New TCP-Friendly High-Speed TCP Variant"
++ * in ACM SIGOPS Operating System Review, July 2008.
++ * Available from:
++ *  https://web.archive.org/web/20160505194415/http://netsrv.csc.ncsu.edu/export/cubic_a_new_tcp_2008.pdf
++ *
++ * CUBIC integrates a new slow start algorithm, called HyStart.
++ * The details of HyStart are presented in
++ *  Sangtae Ha and Injong Rhee,
++ *  "Taming the Elephants: New TCP Slow Start", NCSU TechReport 2008.
++ * Available from:
++ *  https://web.archive.org/web/20160528233754/http://netsrv.csc.ncsu.edu/export/hystart_techreport_2008.pdf
++ *
++ * More information on this implementation: http://dl.acm.org/citation.cfm?id=2756518
++ */
++class TcpCubicCr : public TcpCongestionOps
++{
++  public:
++    /**
++     * \brief Get the type ID.
++     * \return the object TypeId
++     */
++    static TypeId GetTypeId();
++
++    TcpCubicCr();
++
++    /**
++     * Copy constructor
++     * \param sock Socket to copy
++     */
++    TcpCubicCr(const TcpCubicCr& sock);
++
++    std::string GetName() const override;
++    void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt) override;
++    void IncreaseWindow(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked) override;
++    uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) override;
++    void CongestionStateSet(Ptr<TcpSocketState> tcb,
++                            const TcpSocketState::TcpCongState_t newState) override;
++
++    Ptr<TcpCongestionOps> Fork() override;
++
++  private:
++
++    /**
++     * \brief Values to detect the Slow Start mode of HyStart
++     */
++    enum HybridSSDetectionMode
++    {
++        PACKET_TRAIN = 0x1, //!< Detection by trains of packet
++        DELAY = 0x2         //!< Detection by delay value
++    };
++
++    bool m_fastConvergence; //!< Enable or disable fast convergence algorithm
++    double m_beta;          //!< Beta for cubic multiplicative increase
++
++    bool m_hystart;              //!< Enable or disable HyStart algorithm
++    bool m_hystartpp;            //!< Enable or disable CSS in Hystart
++    int m_hystartDetect;         //!< Detect way for HyStart algorithm \see HybridSSDetectionMode
++    uint32_t m_hystartLowWindow; //!< Lower bound cWnd for hybrid slow start (segments)
++    Time m_hystartAckDelta;      //!< Spacing between ack's indicating train
++    Time m_hystartDelayMin;      //!< Minimum time for hystart algorithm
++    Time m_hystartDelayMax;      //!< Maximum time for hystart algorithm
++    uint8_t m_hystartMinSamples; //!< Number of delay samples for detecting the increase of delay
++
++    uint32_t m_initialCwnd; //!< Initial cWnd
++    uint8_t m_cntClamp;     //!< Modulo of the (avoided) float division for cWnd
++
++    double m_c; //!< Cubic Scaling factor
++
++
++    // Cubic parameters
++    uint32_t m_cWndCnt;        //!<  cWnd integer-to-float counter
++    uint32_t m_lastMaxCwnd;    //!<  Last maximum cWnd
++    uint32_t m_bicOriginPoint; //!<  Origin point of bic function
++    double m_bicK;             //!<  Time to origin point from the beginning
++                               //    of the current epoch (in s)
++    Time m_delayMin;           //!<  Min delay
++    Time m_epochStart;         //!<  Beginning of an epoch
++    uint32_t m_found;              //!<  The exit point is found?
++
++	// CR parameters
++	uint32_t m_lastWindow;     //!< window adjust at the start of Unv. Period
++	Time m_lastRtt;            //!< Careful Resume estimation of the path RTT
++	uint32_t m_crState;        //!< Careful Resume state machine 
++    double m_ssthreshReset;    //!< ssthresh multiplier at the end of Invalidated (0==disabled)
++    bool m_progGrowth;         //!< Progressive growth during Reiconassance
++
++    Time m_roundStart;         //!<  Beginning of each round
++    SequenceNumber32 m_endSeq; //!<  End sequence of the round
++    Time m_lastAck;            //!<  Last time when the ACK spacing is close
++    Time m_cubicDelta;         //!<  Time to wait after recovery before update
++    Time m_currRtt;            //!<  Current Rtt
++    uint32_t m_sampleCnt;      //!<  Count of samples for HyStart
++	SequenceNumber32 m_limit;  //!<  Mark for jumping
++
++    // Hystart++ parameters
++    uint32_t m_hystartRounds;
++    uint32_t m_css_first_round;   //!< Marks first round of CSS
++    uint8_t m_css_growth_divisor; //!< Exponential growth factor in CSS
++    uint8_t m_divisor;            //!< Current exponential growth divisor
++    uint8_t m_css_max_rounds;     //!< Max number of rounds in CSS
++    Time m_baselineRtt;           //!< Baseline RTT at CSS entry
++
++
++  private:
++    /**
++     * \brief Reset HyStart parameters
++     * \param tcb Transmission Control Block of the connection
++     */
++    void HystartReset(Ptr<const TcpSocketState> tcb);
++
++    /**
++     * \brief Reset Cubic parameters
++     * \param tcb Transmission Control Block of the connection
++     */
++    void CubicReset(Ptr<const TcpSocketState> tcb);
++
++    /**
++     * \brief Cubic window update after a new ack received
++     * \param tcb Transmission Control Block of the connection
++     * \returns the congestion window update counter
++     */
++    uint32_t Update(Ptr<TcpSocketState> tcb);
++
++    /**
++     * \brief Update HyStart parameters
++     *
++     * \param tcb Transmission Control Block of the connection
++     * \param delay Delay for HyStart algorithm
++     */
++    void HystartUpdate(Ptr<TcpSocketState> tcb, const Time& delay);
++
++    /**
++     * \brief Clamp time value in a range
++     *
++     * The returned value is t, clamped in a range specified
++     * by attributes (HystartDelayMin < t < HystartDelayMax)
++     *
++     * \param t Time value to clamp
++     * \return t itself if it is in range, otherwise the min or max
++     * value
++     */
++    Time HystartDelayThresh(const Time& t) const;
++};
++
++
++class TcpCrRecovery : public TcpClassicRecovery 
++{
++  public:
++    /**
++     * \brief Get the type ID.
++     * \return the object TypeId
++     */
++    static TypeId GetTypeId();
++
++    /**
++     * \brief Constructor
++     */
++    TcpCrRecovery();
++
++    /**
++     * \brief Copy constructor.
++     * \param recovery object to copy.
++     */
++    TcpCrRecovery(const TcpCrRecovery& recovery);
++
++    /**
++     * \brief Constructor
++     */
++    ~TcpCrRecovery() override;
++
++    std::string GetName() const override;
++
++    void EnterRecovery(Ptr<TcpSocketState> tcb,
++                       uint32_t dupAckCount,
++                       uint32_t unAckDataCount,
++                       uint32_t deliveredBytes) override;
++
++    void DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes) override;
++
++    void ExitRecovery(Ptr<TcpSocketState> tcb) override;
++
++    Ptr<TcpRecoveryOps> Fork() override;
++
++  private:
++	Time m_enterRecoveryTime;    // Time the recovery was started
++	Time m_rttLastAck;           // RTT sample at recovery entry
++	Time m_probeEnd;             // Time the jump probe is expected to be ACKed.
++	bool m_enablePipe;
++
++};
++
++
++
++} // namespace ns3
++
++#endif // TCPCUBIC_H
++
+diff --git a/ns-3.39/src/internet/model/tcp-socket-state.h b/ns-3.39/src/internet/model/tcp-socket-state.h
+index eb605c6..f97d594 100644
+--- a/ns-3.39/src/internet/model/tcp-socket-state.h
++++ b/ns-3.39/src/internet/model/tcp-socket-state.h
+@@ -156,6 +156,17 @@ class TcpSocketState : public Object
+                      //!< set in TCP header. This state is used for tracing.
+     };
+ 
++    /**
++     * \brief Definition of th Careful Resume state machine 
++     */
++    enum CrState_t
++    {
++        CR_RECON,     //!< Recoinassance State 
++        CR_UNVAL,     //!< Unvalidated Period after jump
++        CR_RECOVERY,  //!< Recovery following loss after jump
++        CR_NORMAL     //!< Standard congestion control
++    };
++
+     /**
+      * \brief Literal names of TCP states for use in log messages
+      */
+@@ -185,6 +196,7 @@ class TcpSocketState : public Object
+     SequenceNumber32 m_lastAckedSeq{0}; //!< Last sequence ACKed
+ 
+     TracedValue<TcpCongState_t> m_congState{CA_OPEN}; //!< State in the Congestion state machine
++    TracedValue<CrState_t> m_crState{CR_RECON};
+ 
+     TracedValue<EcnState_t> m_ecnState{
+         ECN_DISABLED}; //!< Current ECN State, represented as combination of EcnState values
+-- 
+2.34.1
+
+
+From 30d79f16dcec974f36d4d52d3a40624be6f350f4 Mon Sep 17 00:00:00 2001
+From: rsecchi <r.secchi@gmail.com>
+Date: Mon, 20 Oct 2025 18:04:07 +0100
+Subject: [PATCH 2/2] CR patch
+
+---
+ ns-3.39/src/internet/model/tcp-cr-cubic.cc    | 2 +-
+ ns-3.39/src/internet/model/tcp-socket-base.cc | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/ns-3.39/src/internet/model/tcp-cr-cubic.cc b/ns-3.39/src/internet/model/tcp-cr-cubic.cc
+index 1805f57..bab813f 100644
+--- a/ns-3.39/src/internet/model/tcp-cr-cubic.cc
++++ b/ns-3.39/src/internet/model/tcp-cr-cubic.cc
+@@ -668,7 +668,7 @@ TcpCrRecovery::EnterRecovery(Ptr<TcpSocketState> tcb,
+ 		if (m_enablePipe)
+ 			tcb->m_cWnd = 2*tcb->m_segmentSize;
+ 		else
+-			tcb->m_cWnd = tcb->m_initialCWnd * tcb->m_segmentSize;
++			tcb->m_cWnd = 2*tcb->m_initialCWnd * tcb->m_segmentSize;
+ 	} else
+     	tcb->m_cWnd = tcb->m_ssThresh;
+ 
+diff --git a/ns-3.39/src/internet/model/tcp-socket-base.cc b/ns-3.39/src/internet/model/tcp-socket-base.cc
+index 49cba7a..07f43a0 100644
+--- a/ns-3.39/src/internet/model/tcp-socket-base.cc
++++ b/ns-3.39/src/internet/model/tcp-socket-base.cc
+@@ -2059,7 +2059,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
+             // previously lost and now successfully received. All others have
+             // been processed when they come under the form of dupACKs
+             m_congestionControl->PktsAcked(m_tcb, 1, m_tcb->m_lastRtt);
+-            NewAck(ackNumber, m_isFirstPartialAck);
++            NewAck(ackNumber, m_isFirstPartialAck || m_sackEnabled);
+ 
+             if (m_isFirstPartialAck)
+             {
+-- 
+2.34.1
+
