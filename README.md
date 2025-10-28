@@ -3,8 +3,10 @@
 - **`tcp.*cc`**: These files represent the TCP variants used to integrate Hystart++ into TCP.  
   - Initially tested with **TCP NewReno**  
   - Later implemented with **TCP CUBIC**
+  - This should be applied agains ns-3.37
 
-- We modified the TCP implementation in **NS-3.39**, and a corresponding **patch file** is available.
+- We modified the TCP implementation in **NS-3.39** to include CR, and a corresponding **patch file** is available.
+- The patch ns3.39_CR should be applied againg ns-3.39
 
 
 - **`satlink.cc`**: This file contains the NS-3 script required to run the Quick Opt satellite simulation with the option below.
