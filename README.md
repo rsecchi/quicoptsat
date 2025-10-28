@@ -61,61 +61,45 @@ This script loops over a specified range and runs NS-3 simulations for the chose
 It automates comparisons of TCP congestion control variants (Cubic and CubicCr) under different initial
 congestion windows (IW) and network conditions, including LEO and GEO satellite links.
 
-It requires NS-3 version 3.39 to be installed on the path and Simulation script to be located at scratch/satlink.cc. of ns-3.39
+It requires NS-3 version 3.39 to be installed and the simulation script located at scratch/satlink.cc within the NS-3.39 directory.
 
-Usage
+**Usage:**
+
 1. Configure paths
 
-Edit the script to set your NS-3 installation paths:
-```code
-NS3="/path/to/ns-3/ns3"
-NS3_DIR="/path/to/ns-3/"
-SCRIPT="scratch/satlink.cc"
-```
+   Edit the script to set your NS-3 installation paths:
+   ```bash
+   NS3="/path/to/ns-3/ns3"
+   NS3_DIR="/path/to/ns-3/"
+   SCRIPT="scratch/satlink.cc"
+   ```
 
 2. Set simulation parameters
 
-PARAMS_LEO / PARAMS_GEO – Network parameters for LEO or GEO satellite links.
+   PARAMS_LEO / PARAMS_GEO – Network parameters for LEO or GEO satellite links.
+   TEST – TCP variant and Careful Resume options:
+   ```code
+   --transport_prot=TcpCubicCr   # TCP variant
+   --iw=10                       # Initial congestion window
+   --last_cwnd=200               # Previous congestion window (for CR)
+   --last_rtt=50ms               # Previous RTT (for CR)
+   --ssthresh_reset=1.0          # Slow-start threshold reset
+   ```
 
-TEST – TCP variant and Careful Resume options:
-```code
---transport_prot=TcpCubicCr   # TCP variant
---iw=10                        # Initial congestion window
---last_cwnd=200                # Previous congestion window (for CR)
---last_rtt=50ms                # Previous RTT (for CR)
---ssthresh_reset=1.0           # Slow-start threshold reset
-```
+   RANGE – Number of iterations or data values to simulate.
 
-RANGE – Number of iterations or data values to simulate.
+3. Make the script  executable and runit:
 
-3. Run the script
-
-Make it executable:
-
-chmod +x tcp-variants-comparison.sh
-
-
-Run the script:
-
-./tcp-variants-comparison.sh
-
-
-
-
-Outputs are printed to the terminal and optionally saved to trace files (.tr) for analysis.
+   ```bash
+   chmod +x run_single.sh
+   ./run_single.sh
+   ```
 
 4. Example trace outputs
+   - leo_cubic_iw10.tr – LEO scenario, TCP Cubic, IW=10.
+   - leo_cubic_iw200.tr – LEO scenario, TCP Cubic, IW=200.
+   - geo_cr_cwnd900.tr – GEO scenario, TCP CubicCr with previous cwnd=900.
+   - geo_cubic_iw10.tr – GEO scenario, TCP Cubic, IW=10.
+   - geo_cubic_iw900.tr – GEO scenario, TCP Cubic, IW=900.
 
-- leo_cubic_iw10.tr – LEO scenario, TCP Cubic, IW=10.
-- leo_cubic_iw200.tr – LEO scenario, TCP Cubic, IW=200.
-- geo_cr_cwnd900.tr – GEO scenario, TCP CubicCr with previous cwnd=900.
-- geo_cubic_iw10.tr – GEO scenario, TCP Cubic, IW=10.
-- geo_cubic_iw900.tr – GEO scenario, TCP Cubic, IW=900.
 
-Notes
-
-Use ./single_run.sh --help to see script options.
-
-- Ensure NS3_DIR/cwnd0.tr exists before copying or analyzing traces.
-
-- Modify PARAMS and TEST to test other network conditions or TCP options.
